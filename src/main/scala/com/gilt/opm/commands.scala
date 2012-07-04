@@ -1,6 +1,7 @@
 package com.gilt.opm
 
 import util.parsing.combinator.JavaTokenParsers
+import java.lang.reflect.Method
 
 /*
  *  Some example commands:
@@ -50,10 +51,37 @@ trait CommandParser extends JavaTokenParsers {
     case fqcn: List[String] => Class.forName(fqcn.mkString("."))
   }
 
-  def constructor = className ~ ("(" ~> repsep(deepValue, ",") <~ ")") ^^ {
+  def constructor: Parser[Any] = className ~ ("(" ~> repsep(deepValue, ",") <~ ")") ^^ {
     case (clazz: Class[_]) ~ (args: List[AnyRef]) =>
-      println("args: " + args.mkString(","))
-      clazz + args.toString
+      clazz match {
+        case long if long.getName == "scala.Long" => args.head.toString.toLong
+        case double if double.getName == "scala.Double" => args.head.toString.toDouble
+        case str if str eq classOf[String] => args.head.toString
+        case _ =>
+          clazz.getConstructors.find(_.getParameterTypes.size == args.size) match {
+            case Some(con) =>
+              val c = con
+              c.newInstance(args:_*)
+            case None =>
+              try {
+                val applies = Class.forName(clazz.getName + "$").getMethods.filter(_.getName == "apply")
+                val apply = applies.find {
+                  case (method: Method) =>
+                    method.getParameterTypes.size == 1 && method.getParameterTypes()(0).isAssignableFrom(args.getClass)
+                }
+                apply.map(_.invoke(null, args)).getOrElse(
+                  "Could not find a suitable apply method in %s".format(applies.mkString("\n")))
+              } catch {
+                case e =>
+                  clazz match {
+                    case _ if clazz == classOf[Vector[_]] =>
+                      Vector() ++ args
+                    case _ =>
+                      sys.error("No suitable constructor, and no object.apply factory for %s".format(clazz))
+                  }
+              }
+          }
+      }
   }
 
   def deepValue: Parser[Any] =
