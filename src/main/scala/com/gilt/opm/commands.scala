@@ -48,7 +48,7 @@ trait CommandParser extends JavaTokenParsers {
     case name =>
       val clazz = name match {
         case className :: Nil => Class.forName(List("scala", className).mkString(".") + "$")
-        case fqcn: List[String] => Class.forName(fqcn.mkString("."))
+        case fqcn: List[_] => Class.forName(fqcn.mkString("."))
       }
       clazz.getField("MODULE$").get(clazz)
   }
@@ -58,11 +58,11 @@ trait CommandParser extends JavaTokenParsers {
     case "Set" :: Nil => classOf[scala.collection.immutable.Set[_]]
     case "Map" :: Nil => classOf[scala.collection.immutable.Map[_, _]]
     case name :: Nil => Class.forName(List("scala", name).mkString("."))
-    case fqcn: List[String] => Class.forName(fqcn.mkString("."))
+    case fqcn: List[_] => Class.forName(fqcn.mkString("."))
   }
 
   def constructor: Parser[Any] = className ~ ("(" ~> repsep(deepValue, ",") <~ ")") ^^ {
-    case (clazz: Class[_]) ~ (args: List[AnyRef]) =>
+    case (clazz: Class[_]) ~ (args: List[_]) =>
       clazz match {
         case long if long.getName == "scala.Long" => args.head.toString.toLong
         case double if double.getName == "scala.Double" => args.head.toString.toDouble
@@ -72,7 +72,7 @@ trait CommandParser extends JavaTokenParsers {
           clazz.getConstructors.find(_.getParameterTypes.size == args.size) match {
             case Some(con) =>
               val c = con
-              c.newInstance(args: _*)
+              c.newInstance(args.map(_.asInstanceOf[AnyRef]): _*)
             case None =>
               // no suitable constructor; look for an apply method.  For now we only look for apply methods
               // that take a single Seq-like argument; this could be enhanced. todo

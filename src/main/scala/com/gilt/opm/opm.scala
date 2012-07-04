@@ -39,9 +39,9 @@ case class EventLog[T <: Mutatable[T]](events: Seq[Event[T]] = Vector()) {
   }
 
   def generate(implicit m: Manifest[T]): T = {
-    events.foldLeft(manifest.erasure.newInstance.asInstanceOf[T]) {
-      case (instance: T, event: Event[T]) =>
-        instance.mutate(event.toChange)
+    events.foldLeft(manifest.erasure.newInstance.asInstanceOf[T]: T) {
+      case (instance: AnyRef, event: Event[_]) =>
+        instance.asInstanceOf[T].mutate(event.toChange)
     }
   }
 }
