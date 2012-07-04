@@ -16,18 +16,25 @@ import java.lang.reflect.Method
 
 sealed trait Operation
 
+object MakeOp extends Operation
+
 object SetOp extends Operation
 
 object AddOp extends Operation
 
 object DelOp extends Operation
 
+case class Command(op: Operation, field: String, value: Any)
+
 trait CommandParser extends JavaTokenParsers {
 
-  def command = op ~ on ~ deepValue
+  def command: Parser[Command] = op ~ on ~ deepValue ^^ {
+    case op ~ on ~ deepValue => Command(op, on, deepValue)
+  }
 
   def op: Parser[Operation] = {
-    ("set" | "add" | "del") ^^ {
+    ("make" | "set" | "add" | "del") ^^ {
+      case "make" => MakeOp
       case "set" => SetOp
       case "add" => AddOp
       case "del" => DelOp
@@ -47,6 +54,9 @@ trait CommandParser extends JavaTokenParsers {
   }
 
   def className: Parser[Class[_]] = rep1sep(ident, ".") ^^ {
+    case "List" :: Nil => classOf[scala.collection.immutable.Vector[_]]
+    case "Set" :: Nil => classOf[scala.collection.immutable.Set[_]]
+    case "Map" :: Nil => classOf[scala.collection.immutable.Map[_, _]]
     case name :: Nil => Class.forName(List("scala", name).mkString("."))
     case fqcn: List[String] => Class.forName(fqcn.mkString("."))
   }
@@ -58,11 +68,14 @@ trait CommandParser extends JavaTokenParsers {
         case double if double.getName == "scala.Double" => args.head.toString.toDouble
         case str if str eq classOf[String] => args.head.toString
         case _ =>
+          // todo if several match the look for one with matching argument types
           clazz.getConstructors.find(_.getParameterTypes.size == args.size) match {
             case Some(con) =>
               val c = con
-              c.newInstance(args:_*)
+              c.newInstance(args: _*)
             case None =>
+              // no suitable constructor; look for an apply method.  For now we only look for apply methods
+              // that take a single Seq-like argument; this could be enhanced. todo
               try {
                 val applies = Class.forName(clazz.getName + "$").getMethods.filter(_.getName == "apply")
                 val apply = applies.find {
@@ -76,6 +89,10 @@ trait CommandParser extends JavaTokenParsers {
                   clazz match {
                     case _ if clazz == classOf[Vector[_]] =>
                       Vector() ++ args
+                    case _ if clazz == classOf[Set[_]] =>
+                      Set() ++ args
+                    case _ if clazz == classOf[Map[_, _]] =>
+                      Map() ++ args.grouped(2).map(pair => (pair(0), pair(1)))
                     case _ =>
                       sys.error("No suitable constructor, and no object.apply factory for %s".format(clazz))
                   }

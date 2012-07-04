@@ -2,6 +2,7 @@ package com.gilt.opm
 
 import org.scalatest.FunSuite
 import org.scalatest.matchers.ShouldMatchers
+import java.util
 
 /**
  * Document Me.
@@ -10,7 +11,25 @@ import org.scalatest.matchers.ShouldMatchers
  * @since 7/4/12 1:56 PM
  */
 
+case class HasASet(set: Set[String])
+case class HasAMap(map: Map[String, Long])
+
 class CommandsTest extends FunSuite with ShouldMatchers with CommandParser {
+
+  test("test collections") {
+    parseAll(command, """set set Set("hello", "world")""").get should equal(
+    Command(SetOp, "set", Set("hello", "world")))
+    parseAll(command, """set map Map("hello", "world")""").get should equal(
+      Command(SetOp, "map", Map("hello" -> "world")))
+  }
+
+  test("nested structures") {
+    parseAll(command, """set aHasASet com.gilt.opm.HasASet(Set("hello", "world"))""").get should equal(
+      Command(SetOp, "aHasASet", HasASet(Set("hello", "world"))))
+
+    parseAll(command, """set aHasAMap com.gilt.opm.HasAMap(Map("hello", 7))""").get should equal(
+      Command(SetOp, "aHasAMap", HasAMap(Map("hello" -> 7L))))
+  }
 
   test("parse op") {
     parseAll(op, "set").get should equal(SetOp)
@@ -19,17 +38,17 @@ class CommandsTest extends FunSuite with ShouldMatchers with CommandParser {
   }
 
   test("command parsing") {
-    def assertParses(str: String) {
-      println("Parsing %s".format(str))
+    def assertParses(str: String): Command = {
       parseAll(command, str) match {
-        case result@Success(_, _) => println(result)
+        case result@Success(_, _) => println(result); result.get.asInstanceOf[Command]
         case result@Failure(_, _) => fail("Could not parse %s: %s".format(str, result))
       }
     }
-    assertParses("set start java.util.Date(Long(1341400386466))")
-    assertParses("set end None")
-    assertParses("""add curation com.gilt.opm.Curation(Long(231), scala.collection.immutable.Vector("foo", "bar"))""")
-    assertParses("del curation Long(123)")
+    assertParses("set start java.util.Date(Long(1341400386466))") should equal(Command(SetOp, "start", new util.Date(1341400386466L)))
+    assertParses("set end None") should equal(Command(SetOp, "end", None))
+    assertParses( """add curation com.gilt.opm.Curation(Long(231), List("foo", "bar"))""") should equal(
+      Command(AddOp, "curation", Curation(231, Vector("foo", "bar"))))
+    assertParses("del curation Long(123)") should equal(Command(DelOp, "curation", 123L))
   }
 
   test("string literal parsing") {
