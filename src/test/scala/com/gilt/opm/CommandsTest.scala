@@ -1,8 +1,9 @@
 package com.gilt.opm
 
-import org.scalatest.FunSuite
 import org.scalatest.matchers.ShouldMatchers
 import java.util
+import org.scalatest.FunSuite
+import org.scalatest.prop.Checkers
 
 /**
  * Document Me.
@@ -12,9 +13,10 @@ import java.util
  */
 
 case class HasASet(set: Set[String])
+
 case class HasAMap(map: Map[String, Long])
 
-class CommandsTest extends FunSuite with ShouldMatchers with CommandParser {
+class CommandsTest extends FunSuite with ShouldMatchers with CommandParser with Checkers {
 
   test("create") {
     assert(parseAll(command, """create java.util.Date""").get.value.asInstanceOf[Class[util.Date]] === classOf[util.Date])
@@ -22,7 +24,7 @@ class CommandsTest extends FunSuite with ShouldMatchers with CommandParser {
 
   test("test collections") {
     parseAll(command, """set set Set("hello", "world")""").get should equal(
-    Command(SetOp, Some("set"), Set("hello", "world")))
+      Command(SetOp, Some("set"), Set("hello", "world")))
     parseAll(command, """set map Map("hello", "world")""").get should equal(
       Command(SetOp, Some("map"), Map("hello" -> "world")))
   }
@@ -86,5 +88,23 @@ class CommandsTest extends FunSuite with ShouldMatchers with CommandParser {
   test("object discovery") {
     parseAll(objectName, "None").get should equal(None)
     parseAll(objectName, "scala.None").get should equal(None)
+  }
+
+  test("bidirection character encoding") {
+    check {
+       (randomString: String) =>
+        var parseResult: ParseResult[String] = null
+        try {
+          parseResult = parseAll(stringLiteralParsed, Command.encode(randomString))
+          parseResult.get == randomString
+        } catch {
+          case e =>
+            println("Failed on %s: encode = %s".format(randomString, Command.encode(randomString)))
+            println("%s as bytes: %s".format(randomString, randomString.getBytes("UTF-8").map(b => (b.toInt & 0xff).toHexString).mkString(",")))
+            println(parseResult)
+            e.printStackTrace()
+            false
+        }
+    }
   }
 }

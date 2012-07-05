@@ -4,12 +4,18 @@ package com.gilt.opm
 
 import java.lang.{Long => JLong}
 import collection.mutable.ListBuffer
+import java.io.Writer
+import collection.JavaConversions.MutableBufferWrapper
 
 trait HasId {
   def id: Long
 }
 
-case class Event[T: Manifest](command: Command, timestamp: Long = System.currentTimeMillis)
+case class Event[T: Manifest](command: Command, timestamp: Long = System.currentTimeMillis) {
+  def toEventString: String = {
+    "%s\t%s".format(timestamp,command.toCommandString)
+  }
+}
 
 trait Mutatable[T] {
   def mutate(changes: (String, AnyRef)*): T = {
@@ -33,7 +39,6 @@ trait Mutatable[T] {
 case class EventLog[T <: Mutatable[T]](events: Seq[Event[T]] = Vector()) {
 
   def reify(implicit m: Manifest[T]): T = {
-    val clazz = events.head.command.value.asInstanceOf[Class[T]]
     val obj = events.head.command.value.asInstanceOf[Class[T]].newInstance
     val changes = events.tail.map(_.command).map {
       case Command(SetOp, Some(field), value) => (field -> value.asInstanceOf[AnyRef])
@@ -41,9 +46,15 @@ case class EventLog[T <: Mutatable[T]](events: Seq[Event[T]] = Vector()) {
     }
     obj.mutate(changes: _*)
   }
+
+  def textLog: Seq[String] = events.map(_.toEventString)
 }
 
-object EventLog {
+object EventLog extends CommandParser {
+  def reify[T <: Mutatable[T]](logs: Seq[String]): EventLog[T] = {
+    EventLog(logs.map(parseAll(event, _).get.asInstanceOf[Event[T]]))
+  }
+
   def snapshot[T <: Mutatable[T]](obj: T)(implicit m: Manifest[T]): EventLog[T] = {
     val buffer = new ListBuffer[Event[T]]
     buffer += Event(Command(CreateOp, None, obj.getClass))

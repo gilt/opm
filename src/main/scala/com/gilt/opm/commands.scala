@@ -12,13 +12,66 @@ import java.lang.reflect.Method
  *  set curation Long(231)
  */
 
-sealed trait Operation
+sealed trait Operation {
+  def commandString: String
+}
 
-object CreateOp extends Operation
+object CreateOp extends Operation {
+  val commandString = "create"
+}
 
-object SetOp extends Operation
+object SetOp extends Operation {
+  val commandString = "set"
+}
 
-case class Command(op: Operation, field: Option[String], value: Any)
+case class Command(op: Operation, field: Option[String], value: Any) {
+  def toCommandString: String = {
+    "%s %s %s".format(op.commandString, field.getOrElse(""), Command.commandize(value))
+  }
+}
+
+object Command {
+  def commandize(value: Any): String = {
+    value match {
+      case long: Long => "Long(%s)".format(long)
+      case double: Double => "Double(%s)".format(double)
+      case string: String => encode(string)
+      case clazz: Class[_] => clazz.getName
+      case arbitrary: Any =>
+        val clazz = arbitrary.asInstanceOf[AnyRef].getClass
+        val builder = new StringBuilder
+        builder.append(clazz.getName).append("(")
+        val args = for {
+          field <- clazz.getDeclaredFields
+          method <- clazz.getDeclaredMethods.find(_.getName == field.getName)
+        } yield {
+          method.invoke(arbitrary)
+        }
+        builder.append(args.map(commandize).mkString(","))
+        builder.append(")")
+        builder.toString()
+    }
+  }
+
+  def encode(str: String): String = {
+    val b = str.foldLeft(new StringBuilder) {
+      case (b: StringBuilder, c: Char) =>
+        c match {
+          case '\\' => b.append("\\\\")
+          case '\'' => b.append("\\'")
+          case '"' => b.append("\\\"")
+          case '\b' => b.append("\\b")
+          case '\f' => b.append("\\f")
+          case '\n' => b.append("\\n")
+          case '\r' => b.append("\\r")
+          case '\t' => b.append("\\t")
+          case _ => b.append(c)
+        }
+        b
+    }
+    """"%s"""".format(b.toString())
+  }
+}
 
 trait CommandParser extends JavaTokenParsers {
 
@@ -28,6 +81,10 @@ trait CommandParser extends JavaTokenParsers {
 
   def mutate: Parser[Command] = (op ~ on ~ deepValue) ^^ {
     case op ~ on ~ deepValue => Command(op, Some(on), deepValue)
+  }
+
+  def event = "\\d+".r ~ command ^^ {
+    case timestamp ~ command => Event(command, timestamp.toLong)
   }
 
   def command = create | mutate
@@ -110,7 +167,10 @@ trait CommandParser extends JavaTokenParsers {
 
   def stringLiteralParsed: Parser[String] =
   // work around bug in superclass (https://issues.scala-lang.org/browse/SI-4138)
-    ("\"" + """([^"\p{Cntrl}\\]|\\[\\'"bfnrt]|\\u[a-fA-F0-9]{4})*""" + "\"").r ^^ {
+  // also there seems to be a bug in \p{Cntrl}, where it doesn't work right with
+  // say utf-8 characters whose first byte if 1f
+    //("\"" + """([^"\p{Cntrl}\\]|\\[\\'"bfnrt]|\\u[a-fA-F0-9]{4})*""" + "\"").r ^^ {
+      ("\"" + """([^"\\]|\\[\\'"bfnrt]|\\u[a-fA-F0-9]{4})*""" + "\"").r ^^ {
       case str =>
         val inner = str.tail.dropRight(1)
         var escape = false
