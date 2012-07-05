@@ -16,39 +16,41 @@ case class HasAMap(map: Map[String, Long])
 
 class CommandsTest extends FunSuite with ShouldMatchers with CommandParser {
 
+  test("create") {
+    assert(parseAll(command, """create java.util.Date""").get.value.asInstanceOf[Class[util.Date]] === classOf[util.Date])
+  }
+
   test("test collections") {
     parseAll(command, """set set Set("hello", "world")""").get should equal(
-    Command(SetOp, "set", Set("hello", "world")))
+    Command(SetOp, Some("set"), Set("hello", "world")))
     parseAll(command, """set map Map("hello", "world")""").get should equal(
-      Command(SetOp, "map", Map("hello" -> "world")))
+      Command(SetOp, Some("map"), Map("hello" -> "world")))
   }
 
   test("nested structures") {
     parseAll(command, """set aHasASet com.gilt.opm.HasASet(Set("hello", "world"))""").get should equal(
-      Command(SetOp, "aHasASet", HasASet(Set("hello", "world"))))
+      Command(SetOp, Some("aHasASet"), HasASet(Set("hello", "world"))))
 
     parseAll(command, """set aHasAMap com.gilt.opm.HasAMap(Map("hello", 7))""").get should equal(
-      Command(SetOp, "aHasAMap", HasAMap(Map("hello" -> 7L))))
+      Command(SetOp, Some("aHasAMap"), HasAMap(Map("hello" -> 7L))))
   }
 
   test("parse op") {
     parseAll(op, "set").get should equal(SetOp)
-    parseAll(op, "add").get should equal(AddOp)
-    parseAll(op, "del").get should equal(DelOp)
   }
 
   test("command parsing") {
     def assertParses(str: String): Command = {
       parseAll(command, str) match {
-        case result@Success(_, _) => println(result); result.get.asInstanceOf[Command]
+        case result@Success(_, _) => result.get.asInstanceOf[Command]
         case result@Failure(_, _) => fail("Could not parse %s: %s".format(str, result))
       }
     }
-    assertParses("set start java.util.Date(Long(1341400386466))") should equal(Command(SetOp, "start", new util.Date(1341400386466L)))
-    assertParses("set end None") should equal(Command(SetOp, "end", None))
-    assertParses( """add curation com.gilt.opm.Curation(Long(231), List("foo", "bar"))""") should equal(
-      Command(AddOp, "curation", Curation(231, Vector("foo", "bar"))))
-    assertParses("del curation Long(123)") should equal(Command(DelOp, "curation", 123L))
+    assertParses("set start java.util.Date(Long(1341400386466))") should equal(Command(SetOp, Some("start"), new util.Date(1341400386466L)))
+    assertParses("set end None") should equal(Command(SetOp, Some("end"), None))
+    assertParses( """set curation com.gilt.opm.Curation(Long(231), List("foo", "bar"))""") should equal(
+      Command(SetOp, Some("curation"), Curation(231, Vector("foo", "bar"))))
+    assertParses("set curation Long(123)") should equal(Command(SetOp, Some("curation"), 123L))
   }
 
   test("string literal parsing") {
@@ -58,9 +60,16 @@ class CommandsTest extends FunSuite with ShouldMatchers with CommandParser {
       """.stripMargin).get should equal("hello, world")
     parseAll(stringLiteralParsed,
       """
-        |"'now is the\ntime for all good\n\"men\" to come\tto the aid of their country"
+        |"'now is the\ntime for all good\n\"men\" \'to come\tto \\the aid of their country\b\f\r"
       """.stripMargin).get should equal(
-      "'now is the\ntime for all good\n\"men\" to come\tto the aid of their country")
+      "'now is the\ntime for all good\n\"men\" 'to come\tto \\the aid of their country\b\f\r")
+
+    evaluating {
+      parseAll(stringLiteralParsed,
+        """
+          |"hello, \lworld"
+        """.stripMargin).get
+    } should produce[RuntimeException]
   }
 
   test("long literal parsing") {
@@ -76,5 +85,6 @@ class CommandsTest extends FunSuite with ShouldMatchers with CommandParser {
 
   test("object discovery") {
     parseAll(objectName, "None").get should equal(None)
+    parseAll(objectName, "scala.None").get should equal(None)
   }
 }

@@ -3,14 +3,13 @@ package com.gilt.opm
 // very general stuff
 
 import java.lang.{Long => JLong}
+import collection.mutable.ListBuffer
 
 trait HasId {
   def id: Long
 }
 
-case class Event[T: Manifest](timestamp: Long, command: String) {
-  def toChange: (String, AnyRef) = ("start", new java.util.Date(System.currentTimeMillis().asInstanceOf[JLong]))
-}
+case class Event[T: Manifest](command: Command, timestamp: Long = System.currentTimeMillis)
 
 trait Mutatable[T] {
   def mutate(changes: (String, AnyRef)*): T = {
@@ -33,36 +32,33 @@ trait Mutatable[T] {
 
 case class EventLog[T <: Mutatable[T]](events: Seq[Event[T]] = Vector()) {
 
-  def append(event: Event[T]): EventLog[T] = {
-    copy(event +: events)
-    this
-  }
-
-  def generate(implicit m: Manifest[T]): T = {
-    events.foldLeft(manifest.erasure.newInstance.asInstanceOf[T]: T) {
-      case (instance: AnyRef, event: Event[_]) =>
-        instance.asInstanceOf[T].mutate(event.toChange)
+  def reify(implicit m: Manifest[T]): T = {
+    val clazz = events.head.command.value.asInstanceOf[Class[T]]
+    val obj = events.head.command.value.asInstanceOf[Class[T]].newInstance
+    val changes = events.tail.map(_.command).map {
+      case Command(SetOp, Some(field), value) => (field -> value.asInstanceOf[AnyRef])
+      case cmd => sys.error("Could not reify command %s".format(cmd))
     }
+    obj.mutate(changes: _*)
+  }
+}
+
+object EventLog {
+  def snapshot[T <: Mutatable[T]](obj: T)(implicit m: Manifest[T]): EventLog[T] = {
+    val buffer = new ListBuffer[Event[T]]
+    buffer += Event(Command(CreateOp, None, obj.getClass))
+    buffer ++= {
+      for {
+        field <- m.erasure.getDeclaredFields
+        method <- m.erasure.getMethods.find(_.getName == field.getName)
+      } yield {
+        Event(Command(SetOp, Some(field.getName), method.invoke(obj)))
+      }
+    }
+    EventLog[T](buffer.toSeq)
   }
 }
 
 
-// start of domain specific stuff
 
-import java.util
-
-case class Curation(id: Long, lookElements: Seq[String]) extends Mutatable[Curation] with HasId {
-  def this() = this(0l, Nil)
-}
-
-case class Sale(id: Long, curation: Seq[Curation], start: util.Date, end: Option[util.Date]) extends Mutatable[Sale] with HasId {
-  def this() = this(0l, Nil, new util.Date(0), Some(new util.Date(0)))
-}
-
-object Driver extends App {
-  val eventLog = EventLog[Sale]().append(
-    Event[Sale](System.currentTimeMillis, "set date 1")).append(
-    Event[Sale](System.currentTimeMillis, "set date 1"))
-  println(eventLog.generate)
-}
 

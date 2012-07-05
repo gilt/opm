@@ -8,47 +8,41 @@ import java.lang.reflect.Method
  *
  *  set start java.util.Date(Long(1341400386466))
  *  set end None
- *  add curation com.gilt.opm.Curation(Long(231),scala.collection.immutable.Vector(foo, bar))
- *  del curation Long(231)
- *
- *  [op] [on] [deepValue]
+ *  set curation com.gilt.opm.Curation(Long(231),scala.collection.immutable.Vector("foo", "bar"))
+ *  set curation Long(231)
  */
 
 sealed trait Operation
 
-object MakeOp extends Operation
+object CreateOp extends Operation
 
 object SetOp extends Operation
 
-object AddOp extends Operation
-
-object DelOp extends Operation
-
-case class Command(op: Operation, field: String, value: Any)
+case class Command(op: Operation, field: Option[String], value: Any)
 
 trait CommandParser extends JavaTokenParsers {
 
-  def command: Parser[Command] = op ~ on ~ deepValue ^^ {
-    case op ~ on ~ deepValue => Command(op, on, deepValue)
+  def create: Parser[Command] = "create" ~> className ^^ {
+    case toInstantiate: Class[_] => Command(CreateOp, None, toInstantiate)
   }
 
-  def op: Parser[Operation] = {
-    ("make" | "set" | "add" | "del") ^^ {
-      case "make" => MakeOp
-      case "set" => SetOp
-      case "add" => AddOp
-      case "del" => DelOp
-    }
+  def mutate: Parser[Command] = (op ~ on ~ deepValue) ^^ {
+    case op ~ on ~ deepValue => Command(op, Some(on), deepValue)
   }
 
-  def on = super.ident
+  def command = create | mutate
 
+  def op: Parser[Operation] = "set" ^^ (_ => SetOp)
+
+  def on = super.ident      // for now this is just a field name; maybe someday we can do foo.bar.zip.zap
 
   def objectName: Parser[AnyRef] = rep1sep(ident, ".") ^^ {
     case name =>
       val clazz = name match {
-        case className :: Nil => Class.forName(List("scala", className).mkString(".") + "$")
-        case fqcn: List[_] => Class.forName(fqcn.mkString("."))
+        case className :: Nil =>
+          Class.forName(List("scala", className).mkString(".") + "$")
+        case fqcn: List[_] =>
+          Class.forName(fqcn.mkString(".") + "$")
       }
       clazz.getField("MODULE$").get(clazz)
   }
@@ -64,11 +58,13 @@ trait CommandParser extends JavaTokenParsers {
   def constructor: Parser[Any] = className ~ ("(" ~> repsep(deepValue, ",") <~ ")") ^^ {
     case (clazz: Class[_]) ~ (args: List[_]) =>
       clazz match {
+        // for some reason, class equality for classes like scala.Long is not reliable,
+        // so we fall back to just checking the name. scala bug? todo
         case long if long.getName == "scala.Long" => args.head.toString.toLong
         case double if double.getName == "scala.Double" => args.head.toString.toDouble
         case str if str eq classOf[String] => args.head.toString
         case _ =>
-          // todo if several match the look for one with matching argument types
+          // todo if several match then look for one with matching argument types
           clazz.getConstructors.find(_.getParameterTypes.size == args.size) match {
             case Some(con) =>
               val c = con
@@ -130,7 +126,6 @@ trait CommandParser extends JavaTokenParsers {
                 case 'n' => b.append("\n")
                 case 'r' => b.append("\r")
                 case 't' => b.append("\t")
-                case _ => sys.error("Unknown escape code \\%s in %s".format(c, str))
               }
               escape = false
             } else {
