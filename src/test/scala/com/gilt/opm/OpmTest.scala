@@ -29,7 +29,7 @@ object OpmTest {
 }
 
 
-class OpmTest extends FunSuite with ShouldMatchers with InstanceFactory {
+class OpmTest extends FunSuite with ShouldMatchers with OpmFactory {
 
   import OpmTest.{Foo, Bar}
 

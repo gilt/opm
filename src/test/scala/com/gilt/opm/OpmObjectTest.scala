@@ -28,7 +28,7 @@ object OpmObjectTest {
 
 class OpmObjectTest extends FunSuite with ShouldMatchers {
   import OpmObjectTest._
-  import InstanceFactory._
+  import OpmFactory._
   test("magic") {
     // confirm calling magic always sucks
     val testObj = instance[OpmTestObject]
@@ -62,7 +62,7 @@ class OpmObjectTest extends FunSuite with ShouldMatchers {
     assert(foo != instance[OpmTestObject].set(_.foo).to("FOO"))
     assert(foo != 7)
 
-    val first = InstanceFactory.instance[OpmTestObject].set(_.foo).to("initialValue")
+    val first = OpmFactory.instance[OpmTestObject].set(_.foo).to("initialValue")
     val second = first.set(_.foo).to("secondValue")
     val third = second.set(_.foo).to("initialValue")
     assert(first === third)

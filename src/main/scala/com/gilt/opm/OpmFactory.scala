@@ -3,7 +3,7 @@ package com.gilt.opm
 import java.lang.reflect.{Proxy, Method, InvocationHandler}
 import OpmHelpers.{ClassField, TimestampField, introspectionMode, ModelExposeException, introspectionScratch, Scratch, introspect}
 
-trait InstanceFactory {
+trait OpmFactory {
 
   def clock(): Long
 
@@ -124,6 +124,6 @@ trait InstanceFactory {
   }
 }
 
-object InstanceFactory extends InstanceFactory {
+object OpmFactory extends OpmFactory {
   def clock() = System.currentTimeMillis
 }

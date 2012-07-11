@@ -5,7 +5,7 @@ import scala.collection.mutable
 import OpmHelpers.{Scratch, introspect, introspectionScratch}
 import annotation.tailrec
 
-case class Setter[T <: OpmObject](obj: T, factory: InstanceFactory)(implicit m: Manifest[T]) {
+case class Setter[T <: OpmObject](obj: T, factory: OpmFactory)(implicit m: Manifest[T]) {
   private[this] var stack: mutable.Stack[Scratch] = _
 
   def set[V](v: T => V): Setter[T] = {
@@ -40,6 +40,6 @@ case class Setter[T <: OpmObject](obj: T, factory: InstanceFactory)(implicit m: 
   def :=[V](v: V): T = this.to(v)
 
   def timeMachine(timestamp: Long): Option[T] = {
-    InstanceFactory.timeMachine(obj, timestamp)
+    factory.timeMachine(obj, timestamp)
   }
 }
