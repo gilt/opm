@@ -2,7 +2,7 @@ package com.gilt.opm
 
 import collection.mutable
 
-private [opm] case class OpmProxy(fields: Map[String, Any], history: List[OpmProxy] = Nil, future: List[OpmProxy] = Nil) {
+private [opm] case class OpmProxy(fields: Map[String, Any], history: List[OpmProxy] = Nil) {
 
   import OpmFactory._
 

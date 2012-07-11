@@ -13,51 +13,6 @@ trait OpmFactory {
     newProxy(model = OpmProxy(Map(ClassField -> m.erasure, TimestampField -> clock())))
   }
 
-  @deprecated
-  def timeMachine[T <: OpmObject](obj: T, timestamp: Long)(implicit m: Manifest[T]): Option[T] = {
-    val model = recoverModel(obj)
-    if (model.history.isEmpty && model.future.isEmpty) {
-      if (model.timestamp <= timestamp) {
-        Some(obj)
-      } else {
-        None // model did not exist yet
-      }
-    } else {
-      if (!model.future.isEmpty && timestamp > model.timestamp) {
-        // look backwards in time from the future to find the first timestamp before or equal
-        // new node is head of past
-        val (past, future) = model.future.reverse.partition(_.timestamp <= timestamp)
-        if (past.isEmpty) {
-          Some(obj)
-        } else {
-          val newModel = past.head.copy(history = past.tail ::: model.history, future = future.reverse)
-          Some(newProxy(newModel))
-        }
-      } else if (!model.history.isEmpty) {
-        // look backwards in time from this node to find the first timestamp before or equal
-        // new hode is head of past
-        if (model.timestamp <= timestamp) {
-          Some(obj)
-        } else {
-          val (past, future) = model.history.partition(_.timestamp <= timestamp)
-          if (past.isEmpty) {
-            None
-          } else {
-            val newModel = past.head.copy(history = past.tail, future = model :: future.reverse ::: model.future)
-            Some(newProxy(newModel))
-          }
-        }
-      } else {
-        // history is empty, future is not, and timestamp <= model.timestamp
-        if (timestamp < model.timestamp) {
-          None
-        } else {
-          Some(obj)
-        }
-      }
-    }
-  }
-
   implicit def toSetter[T <: OpmObject](obj: T)(implicit m: Manifest[T]): RichOpmObject[T] = RichOpmObject(obj, this)
 
   private[opm] def instance[T <: OpmObject](model: OpmProxy)(implicit m: Manifest[T]): T = {
@@ -90,6 +45,8 @@ trait OpmFactory {
             } else {
               false.asInstanceOf[AnyRef]
             }
+          case "timestamp" =>
+            model.timestamp.asInstanceOf[AnyRef]
           case fieldName if method.getParameterTypes.isEmpty =>
             if (introspectionMode.get) {
               val stack = introspectionScratch.get()
@@ -119,13 +76,14 @@ trait OpmFactory {
     })
     proxy.asInstanceOf[T]
   }
-
 }
 
 object OpmFactory extends OpmFactory {
+
   def clock() = System.currentTimeMillis
 
   private [opm] val ClassField = "$$class$$"
+
   private [opm] val TimestampField = "$$timestamp$$"
 
   private [opm] case class Scratch(model: OpmProxy, field: String, clazz: Class[_])
