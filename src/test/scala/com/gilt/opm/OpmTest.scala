@@ -25,7 +25,6 @@ object OpmTest {
 
     def things: Set[String]
   }
-
 }
 
 
@@ -63,7 +62,6 @@ class OpmTest extends FunSuite with ShouldMatchers with OpmFactory {
   }
 
   test("time machine") {
-
     val beforeStart = clock()
     val foo = instance[Foo].set(_.name).to("version 1")
     val before = clock()
@@ -104,5 +102,40 @@ class OpmTest extends FunSuite with ShouldMatchers with OpmFactory {
     assert(edgeBackInTime.timeMachine(beforeEdgeEmptyCreated) === None)
     assert(edgeBackInTime.timeMachine(beforeEdgeEmptyCreated + 1) === Some(edgeEmpty))
     assert(edgeBackInTime.timeMachine(beforeEdgeEmptyCreated + 2) === Some(edgeEmpty))
+  }
+
+  test("prune") {
+    val empty = instance[Foo]
+    val created = clock()
+    val init = (empty set(_.name)  := "init")
+    val inited = clock()
+    val pruned = instance[Foo].set(_.name).to("init").prune
+
+    assert(init.timeMachine(created) === Some(empty))
+    assert(init.timeMachine(inited) === Some(init))
+    assert(pruned.timeMachine(inited) === None)
+  }
+
+  test("forceCurrent") {
+    val a = instance[Foo].set(_.name).to("a").prune
+    val b = a.set(_.name) := "b"
+    val c = b.set(_.name) := "c"
+    val bp =  b.forceAfter(c)
+    assert(bp === b)
+    assert(bp.timeline.head === bp)
+    assert(bp.timeline.drop(2).take(1).head === b)
+
+    val cp = c :: bp
+    assert(cp.timeline.take(3).toList === List(cp, c, bp))
+  }
+
+  test("forceCurrent & time machine") {
+    val a = (instance[Foo].set(_.name) := "a").prune
+    val b = a.set(_.name) := "b"
+    val afterB = clock()
+    val c = b.set(_.name) := "c"
+
+    val bp = c.timeMachine(afterB).get
+    evaluating(a.forceAfter(bp)) should produce[RuntimeException]
   }
 }

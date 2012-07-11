@@ -1,9 +1,10 @@
 package com.gilt.opm
 
 import collection.mutable
-import OpmHelpers.{ClassField, TimestampField}
 
-case class MapProxy(fields: Map[String, Any], history: List[MapProxy] = Nil, future: List[MapProxy] = Nil) {
+private [opm] case class OpmProxy(fields: Map[String, Any], history: List[OpmProxy] = Nil, future: List[OpmProxy] = Nil) {
+
+  import OpmFactory._
 
   override def toString: String = {
     val b = new mutable.StringBuilder()

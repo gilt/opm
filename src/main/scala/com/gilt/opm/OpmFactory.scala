@@ -1,20 +1,19 @@
 package com.gilt.opm
 
 import java.lang.reflect.{Proxy, Method, InvocationHandler}
-import OpmHelpers.{ClassField, TimestampField, introspectionMode, ModelExposeException, introspectionScratch, Scratch, introspect}
+import scala.collection.mutable
 
 trait OpmFactory {
 
   def clock(): Long
 
+  import OpmFactory.{ClassField, TimestampField, introspectionMode, ModelExposeException, introspectionScratch, Scratch, recoverModel}
+
   def instance[T <: OpmObject](implicit m: Manifest[T]): T = {
-    newProxy(model = MapProxy(Map(ClassField -> m.erasure, TimestampField -> clock())))
+    newProxy(model = OpmProxy(Map(ClassField -> m.erasure, TimestampField -> clock())))
   }
 
-  def instance[T <: OpmObject](model: MapProxy)(implicit m: Manifest[T]): T = {
-    newProxy(model.copy(fields = model.fields + (TimestampField -> clock())))
-  }
-
+  @deprecated
   def timeMachine[T <: OpmObject](obj: T, timestamp: Long)(implicit m: Manifest[T]): Option[T] = {
     val model = recoverModel(obj)
     if (model.history.isEmpty && model.future.isEmpty) {
@@ -59,9 +58,13 @@ trait OpmFactory {
     }
   }
 
-  implicit def toSetter[T <: OpmObject](obj: T)(implicit m: Manifest[T]): Setter[T] = Setter(obj, this)
+  implicit def toSetter[T <: OpmObject](obj: T)(implicit m: Manifest[T]): RichOpmObject[T] = RichOpmObject(obj, this)
 
-  private def newProxy[T](model: MapProxy)(implicit m: Manifest[T]): T = {
+  private[opm] def instance[T <: OpmObject](model: OpmProxy)(implicit m: Manifest[T]): T = {
+    newProxy(model.copy(fields = model.fields + (TimestampField -> clock())))
+  }
+
+  private[opm] def newProxy[T](model: OpmProxy)(implicit m: Manifest[T]): T = {
     val clazz = m.erasure
     require(clazz.getName == model.clazz.getName, "Class changed from %s to %s".format(model.clazz, clazz))
     require(clazz.isInterface, "Only interface types cannot be created; %s is not an interface".format(clazz))
@@ -74,8 +77,19 @@ trait OpmFactory {
             } else {
               sys.error("magic method should not be called")
             }
-          case "toString" => method.invoke(model)
-          case "hashCode" => method.invoke(model)
+          case "toString" =>
+            method.invoke(model)
+          case "hashCode" =>
+            method.invoke(model)
+          case "equals" =>
+            if (args(0).isInstanceOf[OpmObject]) {
+              val bModel = recoverModel(args(0).asInstanceOf[OpmObject])
+              val a = model.fields.filter(_._1 != TimestampField)
+              val b = bModel.fields.filter(_._1 != TimestampField)
+              (a == b).asInstanceOf[AnyRef]
+            } else {
+              false.asInstanceOf[AnyRef]
+            }
           case fieldName if method.getParameterTypes.isEmpty =>
             if (introspectionMode.get) {
               val stack = introspectionScratch.get()
@@ -98,32 +112,51 @@ trait OpmFactory {
             } else {
               model.fields(fieldName).asInstanceOf[AnyRef]
             }
-          case "equals" =>
-            if (args(0).isInstanceOf[OpmObject]) {
-              val bModel = recoverModel(args(0).asInstanceOf[OpmObject])
-              val a = model.fields.filter(_._1 != TimestampField)
-              val b = bModel.fields.filter(_._1 != TimestampField)
-              (a == b).asInstanceOf[AnyRef]
-            } else {
-              false.asInstanceOf[AnyRef]
-            }
-          case unknown => method.invoke(model)
+          case unknown =>
+            sys.error("Unknown method: %s".format(unknown))
         }
       }
     })
     proxy.asInstanceOf[T]
   }
 
-  private def recoverModel[T <: OpmObject](obj: T): MapProxy = {
+}
+
+object OpmFactory extends OpmFactory {
+  def clock() = System.currentTimeMillis
+
+  private [opm] val ClassField = "$$class$$"
+  private [opm] val TimestampField = "$$timestamp$$"
+
+  private [opm] case class Scratch(model: OpmProxy, field: String, clazz: Class[_])
+
+  private [opm] case class ModelExposeException(model: OpmProxy) extends RuntimeException
+
+  private [opm] val introspectionMode = {
+    val t = new ThreadLocal[Boolean]
+    t.set(false)
+    t
+  }
+
+  private [opm] val introspectionScratch = new ThreadLocal[mutable.Stack[Scratch]]
+
+  private [opm] def introspect[T](f: => T): T = {
+    introspectionScratch.set(new mutable.Stack[Scratch])
+    val was = introspectionMode.get
+    introspectionMode.set(true)
     try {
-      introspect(obj.magic)
+      f
+    } finally {
+      introspectionMode.set(was)
+    }
+  }
+
+  private [opm] def recoverModel[T <: OpmObject](obj: T): OpmProxy = {
+    try {
+      introspect(obj.magic())
       sys.error("never executes")
     } catch {
       case ModelExposeException(model) => model
     }
   }
-}
-
-object OpmFactory extends OpmFactory {
-  def clock() = System.currentTimeMillis
 }

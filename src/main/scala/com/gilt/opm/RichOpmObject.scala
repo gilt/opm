@@ -2,13 +2,15 @@ package com.gilt.opm
 
 import scala.collection.mutable
 
-import OpmHelpers.{Scratch, introspect, introspectionScratch}
 import annotation.tailrec
 
-case class Setter[T <: OpmObject](obj: T, factory: OpmFactory)(implicit m: Manifest[T]) {
-  private[this] var stack: mutable.Stack[Scratch] = _
+case class RichOpmObject[T <: OpmObject](obj: T, factory: OpmFactory)(implicit m: Manifest[T]) {
+  import OpmFactory._
 
-  def set[V](v: T => V): Setter[T] = {
+  private var stack: mutable.Stack[Scratch] = _
+  private lazy val model = recoverModel(obj)
+
+  def set[V](v: T => V): RichOpmObject[T] = {
     try {
       introspect(v(obj))
       stack = introspectionScratch.get
@@ -39,7 +41,24 @@ case class Setter[T <: OpmObject](obj: T, factory: OpmFactory)(implicit m: Manif
 
   def :=[V](v: V): T = this.to(v)
 
+  @deprecated
   def timeMachine(timestamp: Long): Option[T] = {
     factory.timeMachine(obj, timestamp)
+  }
+
+  def prune: T = {
+    factory.instance(model.copy(history = List.empty, future = List.empty))
+  }
+
+  def forceAfter(currentHead: RichOpmObject[T]): T = {
+    require(currentHead.model.future.isEmpty, "Cannot force in front of a time machine view")
+    instance(model.copy(history = currentHead.model :: currentHead.model.history, future = List.empty))
+  }
+
+  def ::(currentHead: RichOpmObject[T]): T = forceAfter(currentHead)
+
+  // this object and its history
+  def timeline: Stream[T] = {
+     obj #:: model.history.view.map(factory.newProxy(_)).toStream
   }
 }
