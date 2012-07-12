@@ -20,19 +20,23 @@ object OpmTest {
     def bar: Bar
   }
 
+  trait SubFoo extends Foo {}
+
   trait Bar extends OpmObject {
     def name: String
 
     def things: Set[String]
   }
+
 }
 
 
 class OpmTest extends FunSuite with ShouldMatchers with OpmFactory {
 
-  import OpmTest.{Foo, Bar}
+  import OpmTest.{Foo, Bar, SubFoo}
 
   var time = 0l
+
   override def clock() = {
     val tmp = time
     time += 1
@@ -60,7 +64,7 @@ class OpmTest extends FunSuite with ShouldMatchers with OpmFactory {
 
   test("prune") {
     val empty = instance[Foo]
-    val init = (empty set(_.name)  := "init")
+    val init = (empty set (_.name) := "init")
     val pruned = init.set(_.name).to("ready").prune
     assert(pruned.timeline.size === 1)
 
@@ -70,7 +74,7 @@ class OpmTest extends FunSuite with ShouldMatchers with OpmFactory {
     val a = instance[Foo].set(_.name).to("a").prune
     val b = a.set(_.name) := "b"
     val c = b.set(_.name) := "c"
-    val bp =  b.forceAfter(c)
+    val bp = b.forceAfter(c)
     assert(bp === b)
     assert(bp.timeline.head === bp)
     assert(bp.timeline.drop(2).take(1).head === b)
@@ -95,7 +99,7 @@ class OpmTest extends FunSuite with ShouldMatchers with OpmFactory {
     val f = c.set(_.name) := "f"
     val g = f.set(_.name) := "g"
 
-    assert(e.timeline.toList === List(e,d,c,b,a))
+    assert(e.timeline.toList === List(e, d, c, b, a))
     assert(g.timeline.toList === List(g, f, c, b, a))
   }
 
@@ -108,5 +112,69 @@ class OpmTest extends FunSuite with ShouldMatchers with OpmFactory {
 
     val b = foo.timeline.dropWhile(_.timestamp >= beforeC)
     assert(b.head === instance[Foo].set(_.name).to("b"))
+  }
+
+  test("basic diff & evolution") {
+    val a = instance[Foo](Map("name" -> "a", "id" -> 0l, "bar" -> instance[Bar](Map("name" -> "barA", "things" -> Set("keg", "glass", "stool")))))
+    val b = instance[Foo](Map("name" -> "b", "id" -> 1l, "bar" -> instance[Bar](Map("name" -> "barB", "things" -> Set("ken", "malibu cruiser")))))
+
+    val fromAtoB = b diff a
+    val bp = a evolve fromAtoB
+    assert(bp === b)
+  }
+
+  test("evolve removing a field") {
+    val a = instance[Foo](Map("name" -> "a", "id" -> 0l))
+    val b = instance[Foo](Map("name" -> "b"))
+
+    val fromAtoB = b diff a
+    val bp = a evolve fromAtoB
+    assert(bp === b)
+  }
+
+  test("evolve adding a field") {
+    val a = instance[Foo](Map("name" -> "a"))
+    val b = instance[Foo](Map("name" -> "b", "id" -> 1l))
+
+    val fromAtoB = b diff a
+    val bp = a evolve fromAtoB
+    assert(bp === b)
+  }
+
+  test("identical evolution") {
+    val a = instance[Foo](Map("name" -> "a"))
+    val b = a
+
+    val fromAtoB = b diff a
+    val bp = a evolve fromAtoB
+    assert(bp === b)
+
+  }
+
+  test("empty evolution") {
+    val a = instance[Foo]
+    val b = instance[Foo]
+
+    val fromAtoB = b diff a
+    val bp = a evolve fromAtoB
+    assert(bp === b)
+  }
+
+  // test diff across types fails
+  test("diff type constraints") {
+    evaluating {
+      instance[Foo] diff
+        new Foo {
+          def id = 0L
+
+          def name = null
+
+          def bar = null
+        }.asInstanceOf[Foo]
+    } should produce[RuntimeException]
+
+    evaluating {
+      instance[Foo] diff instance[SubFoo]
+    } should produce[RuntimeException]
   }
 }

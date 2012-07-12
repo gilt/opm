@@ -1,10 +1,13 @@
 package com.gilt.opm
 
-import scala.collection.mutable
+import collection.mutable
 
 import annotation.tailrec
 
+case class Diff(field: String, newValue: Option[Any])
+
 case class RichOpmObject[T <: OpmObject : Manifest](obj: T, factory: OpmFactory) {
+
   import OpmFactory._
 
   private var stack: mutable.Stack[Scratch] = _
@@ -52,6 +55,43 @@ case class RichOpmObject[T <: OpmObject : Manifest](obj: T, factory: OpmFactory)
 
   // this object and its history
   def timeline: Stream[T] = {
-     obj #:: model.history.view.map(factory.newProxy(_)).toStream
+    obj #:: model.history.view.map(factory.newProxy(_)).toStream
+  }
+
+  // a diff b returns the set of changes such that
+  // b evolve (a diff b) == a
+  // (so, the set of changes to transform that into this)
+  def diff(that: RichOpmObject[T]): Set[Diff] = {
+    import OpmFactory.metaFields
+    val thisModel = model
+    val thatModel = that.model
+    require(thisModel.clazz.getName == thatModel.clazz.getName,
+      ("We don't support changing class (yet ... request the feature if you need it) " +
+        "(this = %s, that = %s)").format(thisModel.clazz, thatModel.clazz))
+    val allFields = (thisModel.fields.map(_._1).toSet ++ thatModel.fields.map(_._1)).filterNot(metaFields)
+    val diffs = for (field <- allFields) yield {
+      (thisModel.fields.get(field), thatModel.fields.get(field)) match {
+        case (None, Some(any)) => Some(Diff(field, None))
+        case (any@Some(_), None) => Some(Diff(field, any))
+        case (value@Some(one), Some(another)) if one != another => Some(Diff(field, value))
+        case (Some(_), Some(_)) => None
+        case (None, None) => sys.error("It should not be possible for missing values in both objects")
+      }
+    }
+    diffs.flatten.toSet
+  }
+
+  def evolve(changes: Set[Diff]): T = {
+    val byField = changes.map(diff => diff.field -> diff.newValue).toMap
+    val newFields = byField.flatMap {
+      field =>
+        byField(field._1) match {
+          case None => None
+          case Some(value) => Some(field._1 -> value)
+        }
+    }
+
+    instance(model.copy(fields = newFields ++ model.fields.filterNot(f => byField.keySet.contains(f._1)),
+      history = model :: model.history))
   }
 }

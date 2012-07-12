@@ -13,6 +13,10 @@ trait OpmFactory {
     newProxy(model = OpmProxy(Map(ClassField -> manifest.erasure, TimestampField -> clock())))
   }
 
+  def instance[T <: OpmObject : Manifest](init: Map[String, Any]): T = {
+    newProxy(model = OpmProxy(init ++ Map(ClassField -> manifest.erasure, TimestampField -> clock())))
+  }
+
   implicit def toSetter[T <: OpmObject : Manifest](obj: T): RichOpmObject[T] = RichOpmObject(obj, this)
 
   private[opm] def instance[T <: OpmObject : Manifest](model: OpmProxy): T = {
@@ -85,6 +89,8 @@ object OpmFactory extends OpmFactory {
   private [opm] val ClassField = "$$class$$"
 
   private [opm] val TimestampField = "$$timestamp$$"
+
+  private [opm] val metaFields = Set(ClassField, TimestampField)
 
   private [opm] case class Scratch(model: OpmProxy, field: String, clazz: Class[_])
 
