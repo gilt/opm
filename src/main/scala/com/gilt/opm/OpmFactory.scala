@@ -9,18 +9,18 @@ trait OpmFactory {
 
   import OpmFactory.{ClassField, TimestampField, introspectionMode, ModelExposeException, introspectionScratch, Scratch, recoverModel}
 
-  def instance[T <: OpmObject](implicit m: Manifest[T]): T = {
-    newProxy(model = OpmProxy(Map(ClassField -> m.erasure, TimestampField -> clock())))
+  def instance[T <: OpmObject : Manifest]: T = {
+    newProxy(model = OpmProxy(Map(ClassField -> manifest.erasure, TimestampField -> clock())))
   }
 
-  implicit def toSetter[T <: OpmObject](obj: T)(implicit m: Manifest[T]): RichOpmObject[T] = RichOpmObject(obj, this)
+  implicit def toSetter[T <: OpmObject : Manifest](obj: T): RichOpmObject[T] = RichOpmObject(obj, this)
 
-  private[opm] def instance[T <: OpmObject](model: OpmProxy)(implicit m: Manifest[T]): T = {
+  private[opm] def instance[T <: OpmObject : Manifest](model: OpmProxy): T = {
     newProxy(model.copy(fields = model.fields + (TimestampField -> clock())))
   }
 
-  private[opm] def newProxy[T](model: OpmProxy)(implicit m: Manifest[T]): T = {
-    val clazz = m.erasure
+  private[opm] def newProxy[T: Manifest](model: OpmProxy): T = {
+    val clazz = manifest.erasure
     require(clazz.getName == model.clazz.getName, "Class changed from %s to %s".format(model.clazz, clazz))
     require(clazz.isInterface, "Only interface types cannot be created; %s is not an interface".format(clazz))
     val proxy = Proxy.newProxyInstance(clazz.getClassLoader, clazz +: clazz.getInterfaces, new InvocationHandler() {

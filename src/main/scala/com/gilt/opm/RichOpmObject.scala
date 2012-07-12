@@ -4,7 +4,7 @@ import scala.collection.mutable
 
 import annotation.tailrec
 
-case class RichOpmObject[T <: OpmObject](obj: T, factory: OpmFactory)(implicit m: Manifest[T]) {
+case class RichOpmObject[T <: OpmObject : Manifest](obj: T, factory: OpmFactory) {
   import OpmFactory._
 
   private var stack: mutable.Stack[Scratch] = _

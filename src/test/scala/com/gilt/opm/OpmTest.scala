@@ -98,4 +98,15 @@ class OpmTest extends FunSuite with ShouldMatchers with OpmFactory {
     assert(e.timeline.toList === List(e,d,c,b,a))
     assert(g.timeline.toList === List(g, f, c, b, a))
   }
+
+  test("searching history") {
+    var foo = instance[Foo].set(_.name).to("a").prune
+    foo = foo.set(_.name) := "b"
+    val beforeC = clock()
+    foo = foo.set(_.name) := "c"
+    foo = foo.set(_.name) := "d"
+
+    val b = foo.timeline.dropWhile(_.timestamp >= beforeC)
+    assert(b.head === instance[Foo].set(_.name).to("b"))
+  }
 }
