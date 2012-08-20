@@ -43,6 +43,10 @@ case class RichOpmObject[T <: OpmObject : Manifest](obj: T, factory: OpmFactory)
 
   def :=[V](v: V): T = this.to(v)
 
+  def pruneTo[V](v: V): T = this.to(v).prune
+
+  def ::=[V](v: V): T = this.pruneTo(v)
+
   def prune: T = {
     factory.instance(model.copy(history = List.empty))
   }
