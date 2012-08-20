@@ -3,11 +3,20 @@ package com.gilt.opm
 import java.lang.reflect.{Proxy, Method, InvocationHandler}
 import scala.collection.mutable
 
+object OpmIntrospection {
+  val ClassField = "$$class$$"
+
+  val TimestampField = "$$timestamp$$"
+
+  val MetaFields = Set(ClassField, TimestampField)
+}
+
 trait OpmFactory {
 
   def clock(): Long
 
-  import OpmFactory.{ClassField, TimestampField, introspectionMode, ModelExposeException, introspectionScratch, Scratch, recoverModel}
+  import OpmIntrospection._
+  import OpmFactory.{introspectionMode, ModelExposeException, introspectionScratch, Scratch, recoverModel}
 
   def instance[T <: OpmObject : Manifest]: T = {
     newProxy(model = OpmProxy(Map(ClassField -> manifest.erasure, TimestampField -> clock())))
@@ -85,12 +94,6 @@ trait OpmFactory {
 object OpmFactory extends OpmFactory {
 
   def clock() = System.currentTimeMillis
-
-  private [opm] val ClassField = "$$class$$"
-
-  private [opm] val TimestampField = "$$timestamp$$"
-
-  private [opm] val metaFields = Set(ClassField, TimestampField)
 
   private [opm] case class Scratch(model: OpmProxy, field: String, clazz: Class[_])
 

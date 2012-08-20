@@ -66,13 +66,13 @@ case class RichOpmObject[T <: OpmObject : Manifest](obj: T, factory: OpmFactory)
   // b evolve (a diff b) == a
   // (so, the set of changes to transform that into this)
   def diff(that: RichOpmObject[T]): Set[Diff] = {
-    import OpmFactory.metaFields
+    import OpmIntrospection.MetaFields
     val thisModel = model
     val thatModel = that.model
     require(thisModel.clazz.getName == thatModel.clazz.getName,
       ("We don't support changing class (yet ... request the feature if you need it) " +
         "(this = %s, that = %s)").format(thisModel.clazz, thatModel.clazz))
-    val allFields = (thisModel.fields.map(_._1).toSet ++ thatModel.fields.map(_._1)).filterNot(metaFields)
+    val allFields = (thisModel.fields.map(_._1).toSet ++ thatModel.fields.map(_._1)).filterNot(MetaFields)
     val diffs = for (field <- allFields) yield {
       (thisModel.fields.get(field), thatModel.fields.get(field)) match {
         case (None, Some(any)) => Some(Diff(field, None))

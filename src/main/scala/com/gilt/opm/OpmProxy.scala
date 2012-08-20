@@ -4,7 +4,7 @@ import collection.mutable
 
 private [opm] case class OpmProxy(fields: Map[String, Any], history: List[OpmProxy] = Nil) {
 
-  import OpmFactory._
+  import OpmIntrospection._
 
   override def toString: String = {
     val b = new mutable.StringBuilder()
