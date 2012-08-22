@@ -10,3 +10,5 @@ libraryDependencies ++= Seq(
         "org.scalacheck" %% "scalacheck" % "1.9" % "test"
         )
 
+crossPaths := false
+
