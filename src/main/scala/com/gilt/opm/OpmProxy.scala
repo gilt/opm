@@ -2,7 +2,13 @@ package com.gilt.opm
 
 import collection.mutable
 
-private [opm] case class OpmProxy(fields: Map[String, Any], history: List[OpmProxy] = Nil) {
+private [opm] object OpmProxy {
+  def apply(history: Stream[OpmProxy]): OpmProxy = {
+    OpmProxy(history.head.fields, history)
+  }
+}
+
+private [opm] case class OpmProxy(fields: Map[String, Any], history: Stream[OpmProxy] = Nil.toStream) {
 
   import OpmIntrospection._
 

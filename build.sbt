@@ -12,3 +12,5 @@ libraryDependencies ++= Seq(
 
 crossPaths := false
 
+releaseSettings
+

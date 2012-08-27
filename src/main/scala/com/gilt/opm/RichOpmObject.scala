@@ -28,7 +28,7 @@ case class RichOpmObject[T <: OpmObject : Manifest](obj: T, factory: OpmFactory)
     @tailrec
     def populate(scratch: Scratch, value: Any): AnyRef = {
       val newFields = scratch.model.fields + (scratch.field -> value)
-      val newModel = scratch.model.copy(fields = newFields, history = scratch.model :: scratch.model.history)
+      val newModel = scratch.model.copy(fields = newFields, history = scratch.model #:: scratch.model.history)
       val newInstance = factory.instance(newModel)(new Manifest[OpmObject] {
         override val erasure = scratch.clazz
       })
@@ -48,11 +48,11 @@ case class RichOpmObject[T <: OpmObject : Manifest](obj: T, factory: OpmFactory)
   def ::=[V](v: V): T = this.pruneTo(v)
 
   def prune: T = {
-    factory.instance(model.copy(history = List.empty))
+    factory.instance(model.copy(history = Stream.empty))
   }
 
   def forceAfter(currentHead: RichOpmObject[T]): T = {
-    instance(model.copy(history = currentHead.model :: currentHead.model.history))
+    instance(model.copy(history = currentHead.model #:: currentHead.model.history))
   }
 
   def ::(currentHead: RichOpmObject[T]): T = forceAfter(currentHead)
@@ -96,6 +96,6 @@ case class RichOpmObject[T <: OpmObject : Manifest](obj: T, factory: OpmFactory)
     }
 
     instance(model.copy(fields = newFields ++ model.fields.filterNot(f => byField.keySet.contains(f._1)),
-      history = model :: model.history))
+      history = model #:: model.history))
   }
 }
