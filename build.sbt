@@ -14,3 +14,5 @@ crossPaths := false
 
 releaseSettings
 
+gilt.Publish.settings
+
