@@ -1,16 +1,9 @@
 package opm
 
 import sbt._
+import gilt.GiltProject
 
 object OpmBuild extends Build {
-
-  lazy val Default = config("default") describedAs("for legacy compatibility") extend(Compile)
-
-  lazy val root = Project(
-    id = "opm",
-    base = file("."),
-    settings = Project.defaultSettings
-  ).configs(Default)
-
+  lazy val root = GiltProject(id = "opm", base = file("."))
 }
 
