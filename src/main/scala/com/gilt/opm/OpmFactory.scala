@@ -4,9 +4,9 @@ import java.lang.reflect.{Proxy, Method, InvocationHandler}
 import scala.collection.mutable
 
 object OpmIntrospection {
-  val ClassField = "$$class$$"
+  val ClassField = "__c__"
 
-  val TimestampField = "$$timestamp$$"
+  val TimestampField = "__t__"
 
   val MetaFields = Set(ClassField, TimestampField)
 }
@@ -93,7 +93,7 @@ trait OpmFactory {
 
 object OpmFactory extends OpmFactory {
 
-  def clock() = System.currentTimeMillis
+  def clock() = System.nanoTime()
 
   private [opm] case class Scratch(model: OpmProxy, field: String, clazz: Class[_])
 
@@ -125,5 +125,47 @@ object OpmFactory extends OpmFactory {
     } catch {
       case ModelExposeException(model) => model
     }
+  }
+
+  private [opm] def diffModels(thisModel: OpmProxy, thatModel: OpmProxy): Set[Diff] = {
+    import OpmIntrospection._
+    require(thisModel.clazz.getName == thatModel.clazz.getName,
+      ("We don't support changing class (yet ... request the feature if you need it) " +
+        "(this = %s, that = %s)").format(thisModel.clazz, thatModel.clazz))
+    val allFields = (thisModel.fields.map(_._1).toSet ++ thatModel.fields.map(_._1)).filterNot(MetaFields)
+    val diffs = for (field <- allFields) yield {
+      (thisModel.fields.get(field), thatModel.fields.get(field)) match {
+        case (None, Some(any)) => Some(Diff(field, None))
+        case (any@Some(_), None) => Some(Diff(field, any))
+        case (value@Some(one), Some(another)) if one != another => Some(Diff(field, value))
+        case (Some(_), Some(_)) => None
+        case (None, None) => sys.error("It should not be possible for missing values in both objects")
+      }
+    }
+    diffs.flatten.toSet
+  }
+
+  private [opm] def evolve(fields: Map[String, Any], changes: Set[Diff]): Map[String, Any] = {
+
+    // a change can be a modification, addition, or removal
+    val changesByField: Map[String, Option[Any]] = changes.map(diff => diff.field -> diff.newValue).toMap
+
+    // fields which were either modified or added, we don't care which
+    val newOrChangedFields: Map[String, Any] = changesByField.flatMap {
+      field =>
+        changesByField(field._1) match {
+          case None => None
+          case Some(value) => Some(field._1 -> value)
+        }
+    }
+
+    // fields which were added, modified, or deleted
+    val touchedFields: Set[String] = changesByField.keySet
+
+    // fields which were not modified or deleted
+    val untouched: Map[String, Any] = fields.filterNot(f => touchedFields.contains(f._1))
+
+    // new or modified fields ++ unmodified fields (so deleted fields get removed here)
+    newOrChangedFields ++ untouched
   }
 }

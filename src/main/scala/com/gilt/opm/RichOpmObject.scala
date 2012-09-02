@@ -6,6 +6,23 @@ import annotation.tailrec
 
 case class Diff(field: String, newValue: Option[Any])
 
+/**
+ * This class is used to make sure that you are passing the right type
+ * to "to". Before this, you could "set(_.foo).to(bar), and get a runtime
+ * failure if bar was not the right type.
+ */
+case class RichOpmObjectSetter[T <: OpmObject, V](roo: RichOpmObject[T]) {
+  def to(v: V): T = {
+    roo.to(v)
+  }
+
+  def pruneTo(v: V): T = roo.pruneTo(v)
+
+  def :=(v: V): T = this.to(v)
+
+  def ::=(v: V): T = this.pruneTo(v)
+}
+
 case class RichOpmObject[T <: OpmObject : Manifest](obj: T, factory: OpmFactory) {
 
   import OpmFactory._
@@ -13,18 +30,18 @@ case class RichOpmObject[T <: OpmObject : Manifest](obj: T, factory: OpmFactory)
   private var stack: mutable.Stack[Scratch] = _
   private lazy val model = recoverModel(obj)
 
-  def set[V](v: T => V): RichOpmObject[T] = {
+  def set[V](v: T => V): RichOpmObjectSetter[T, V] = {
     try {
       introspect(v(obj))
       stack = introspectionScratch.get
       require(stack != null)
-      this
+      RichOpmObjectSetter(this)
     } finally {
       introspectionScratch.set(null)
     }
   }
 
-  def to[V](v: V): T = {
+  private [opm] def to[V](v: V): T = {
     @tailrec
     def populate(scratch: Scratch, value: Any): AnyRef = {
       val newFields = scratch.model.fields + (scratch.field -> value)
@@ -41,11 +58,11 @@ case class RichOpmObject[T <: OpmObject : Manifest](obj: T, factory: OpmFactory)
     populate(stack.pop(), v).asInstanceOf[T]
   }
 
-  def :=[V](v: V): T = this.to(v)
+  private [opm] def :=[V](v: V): T = this.to(v)
 
-  def pruneTo[V](v: V): T = this.to(v).prune
+  private [opm] def pruneTo[V](v: V): T = this.to(v).prune
 
-  def ::=[V](v: V): T = this.pruneTo(v)
+  private [opm] def ::=[V](v: V): T = this.pruneTo(v)
 
   def prune: T = {
     factory.instance(model.copy(history = Stream.empty))
@@ -66,36 +83,14 @@ case class RichOpmObject[T <: OpmObject : Manifest](obj: T, factory: OpmFactory)
   // b evolve (a diff b) == a
   // (so, the set of changes to transform that into this)
   def diff(that: RichOpmObject[T]): Set[Diff] = {
-    import OpmIntrospection.MetaFields
-    val thisModel = model
-    val thatModel = that.model
-    require(thisModel.clazz.getName == thatModel.clazz.getName,
-      ("We don't support changing class (yet ... request the feature if you need it) " +
-        "(this = %s, that = %s)").format(thisModel.clazz, thatModel.clazz))
-    val allFields = (thisModel.fields.map(_._1).toSet ++ thatModel.fields.map(_._1)).filterNot(MetaFields)
-    val diffs = for (field <- allFields) yield {
-      (thisModel.fields.get(field), thatModel.fields.get(field)) match {
-        case (None, Some(any)) => Some(Diff(field, None))
-        case (any@Some(_), None) => Some(Diff(field, any))
-        case (value@Some(one), Some(another)) if one != another => Some(Diff(field, value))
-        case (Some(_), Some(_)) => None
-        case (None, None) => sys.error("It should not be possible for missing values in both objects")
-      }
-    }
-    diffs.flatten.toSet
+    diffModels(model, that.model)
   }
 
-  def evolve(changes: Set[Diff]): T = {
-    val byField = changes.map(diff => diff.field -> diff.newValue).toMap
-    val newFields = byField.flatMap {
-      field =>
-        byField(field._1) match {
-          case None => None
-          case Some(value) => Some(field._1 -> value)
-        }
-    }
+  def -:-(that: RichOpmObject[T]): Set[Diff] = this.diff(that)
 
-    instance(model.copy(fields = newFields ++ model.fields.filterNot(f => byField.keySet.contains(f._1)),
+  def evolve(changes: Set[Diff]): T = {
+    instance(model.copy(fields = OpmFactory.evolve(model.fields, changes),
       history = model #:: model.history))
   }
 }
+
