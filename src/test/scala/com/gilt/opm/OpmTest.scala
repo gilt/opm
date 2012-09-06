@@ -44,11 +44,11 @@ class OpmTest extends FunSuite with ShouldMatchers with OpmFactory {
   }
 
   test("basics") {
-    val foo = instance[Foo]
+    val foo = instance[Foo]("")
     val foo2 = foo.set(_.name) := "test"
     assert(foo2.name === "test")
 
-    val foo3 = foo2.set(_.bar).to(instance[Bar])
+    val foo3 = foo2.set(_.bar).to(instance[Bar](""))
     val foo4 = foo3.set(_.bar.name).to("a bar")
     assert(foo4.bar.name === "a bar")
 
@@ -57,13 +57,13 @@ class OpmTest extends FunSuite with ShouldMatchers with OpmFactory {
   }
 
   test("set id") {
-    var foo = instance[Foo]
+    var foo = instance[Foo]("")
     foo = foo.set(_.id) := 7L
     assert(foo.id === 7L)
   }
 
   test("prune") {
-    val empty = instance[Foo]
+    val empty = instance[Foo]("")
     val init = (empty set (_.name) := "init")
     val pruned = init.set(_.name).to("ready").prune
     assert(pruned.timeline.size === 1)
@@ -71,7 +71,7 @@ class OpmTest extends FunSuite with ShouldMatchers with OpmFactory {
   }
 
   test("forceCurrent") {
-    val a = instance[Foo].set(_.name).to("a").prune
+    val a = instance[Foo]("").set(_.name).to("a").prune
     val b = a.set(_.name) := "b"
     val c = b.set(_.name) := "c"
     val bp = b.forceAfter(c)
@@ -85,12 +85,12 @@ class OpmTest extends FunSuite with ShouldMatchers with OpmFactory {
 
   test("timestamp") {
     val before = clock()
-    val a = instance[Foo].set(_.name) := "a"
+    val a = instance[Foo]("").set(_.name) := "a"
     assert(a.timestamp === before + 2)
   }
 
   test("branching") {
-    val a = instance[Foo].set(_.name).to("a").prune
+    val a = instance[Foo]("").set(_.name).to("a").prune
     val b = a.set(_.name) := "b"
     val c = b.set(_.name) := "c"
     val d = c.set(_.name) := "d"
@@ -104,19 +104,19 @@ class OpmTest extends FunSuite with ShouldMatchers with OpmFactory {
   }
 
   test("searching history") {
-    var foo = instance[Foo].set(_.name).to("a").prune
+    var foo = instance[Foo]("").set(_.name).to("a").prune
     foo = foo.set(_.name) := "b"
     val beforeC = clock()
     foo = foo.set(_.name) := "c"
     foo = foo.set(_.name) := "d"
 
     val b = foo.timeline.dropWhile(_.timestamp >= beforeC)
-    assert(b.head === instance[Foo].set(_.name).to("b"))
+    assert(b.head === instance[Foo]("").set(_.name).to("b"))
   }
 
   test("basic diff & evolution") {
-    val a = instance[Foo](Map("name" -> "a", "id" -> 0l, "bar" -> instance[Bar](Map("name" -> "barA", "things" -> Set("keg", "glass", "stool")))))
-    val b = instance[Foo](Map("name" -> "b", "id" -> 1l, "bar" -> instance[Bar](Map("name" -> "barB", "things" -> Set("ken", "malibu cruiser")))))
+    val a = instance[Foo]("", Map("name" -> "a", "id" -> 0l, "bar" -> instance[Bar]("", Map("name" -> "barA", "things" -> Set("keg", "glass", "stool")))))
+    val b = instance[Foo]("", Map("name" -> "b", "id" -> 1l, "bar" -> instance[Bar]("", Map("name" -> "barB", "things" -> Set("ken", "malibu cruiser")))))
 
     val fromAtoB = b diff a
     val bp = a evolve fromAtoB
@@ -124,8 +124,8 @@ class OpmTest extends FunSuite with ShouldMatchers with OpmFactory {
   }
 
   test("evolve removing a field") {
-    val a = instance[Foo](Map("name" -> "a", "id" -> 0l))
-    val b = instance[Foo](Map("name" -> "b"))
+    val a = instance[Foo]("", Map("name" -> "a", "id" -> 0l))
+    val b = instance[Foo]("", Map("name" -> "b"))
 
     val fromAtoB = b diff a
     val bp = a evolve fromAtoB
@@ -133,8 +133,8 @@ class OpmTest extends FunSuite with ShouldMatchers with OpmFactory {
   }
 
   test("evolve adding a field") {
-    val a = instance[Foo](Map("name" -> "a"))
-    val b = instance[Foo](Map("name" -> "b", "id" -> 1l))
+    val a = instance[Foo]("", Map("name" -> "a"))
+    val b = instance[Foo]("", Map("name" -> "b", "id" -> 1l))
 
     val fromAtoB = b diff a
     val bp = a evolve fromAtoB
@@ -142,7 +142,7 @@ class OpmTest extends FunSuite with ShouldMatchers with OpmFactory {
   }
 
   test("identical evolution") {
-    val a = instance[Foo](Map("name" -> "a"))
+    val a = instance[Foo]("", Map("name" -> "a"))
     val b = a
 
     val fromAtoB = b diff a
@@ -152,8 +152,8 @@ class OpmTest extends FunSuite with ShouldMatchers with OpmFactory {
   }
 
   test("empty evolution") {
-    val a = instance[Foo]
-    val b = instance[Foo]
+    val a = instance[Foo]("")
+    val b = instance[Foo]("")
 
     val fromAtoB = b diff a
     val bp = a evolve fromAtoB
@@ -163,7 +163,7 @@ class OpmTest extends FunSuite with ShouldMatchers with OpmFactory {
   // test diff across types fails
   test("diff type constraints") {
     evaluating {
-      instance[Foo] diff
+      instance[Foo]("") diff
         new Foo {
           def id = 0L
 
@@ -174,7 +174,7 @@ class OpmTest extends FunSuite with ShouldMatchers with OpmFactory {
     } should produce[RuntimeException]
 
     evaluating {
-      instance[Foo] diff instance[SubFoo]
+      instance[Foo]("") diff instance[SubFoo]("")
     } should produce[RuntimeException]
   }
 }

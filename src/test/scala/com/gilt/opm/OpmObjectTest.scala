@@ -31,13 +31,13 @@ class OpmObjectTest extends FunSuite with ShouldMatchers {
   import OpmFactory._
   test("magic") {
     // confirm calling magic always sucks
-    val testObj = instance[OpmTestObject]
+    val testObj = instance[OpmTestObject]("")
     evaluating(testObj.magic()) should produce[RuntimeException]
     evaluating(new OpmObject{}.magic()) should produce[RuntimeException]
   }
 
   test("native types") {
-    val fixture = instance[NativeTypes].
+    val fixture = instance[NativeTypes]("").
       set(_.aByte).to(1.asInstanceOf[Byte]).
       set(_.aChar).to(2.asInstanceOf[Char]).
       set(_.aShort).to(3.asInstanceOf[Short]).
@@ -56,13 +56,13 @@ class OpmObjectTest extends FunSuite with ShouldMatchers {
   }
 
   test("equality & hashCode") {
-    val foo = instance[OpmTestObject].set(_.foo) := "foo"
+    val foo = instance[OpmTestObject]("").set(_.foo) := "foo"
     assert(foo === foo)
-    assert(instance[OpmTestObject].set(_.foo).to("hello") === instance[OpmTestObject].set(_.foo).to("hello"))
-    assert(foo != instance[OpmTestObject].set(_.foo).to("FOO"))
+    assert(instance[OpmTestObject]("1").set(_.foo).to("hello") === instance[OpmTestObject]("2").set(_.foo).to("hello"))
+    assert(foo != instance[OpmTestObject]("").set(_.foo).to("FOO"))
     assert(foo != 7)
 
-    val first = OpmFactory.instance[OpmTestObject].set(_.foo).to("initialValue")
+    val first = OpmFactory.instance[OpmTestObject]("").set(_.foo).to("initialValue")
     val second = first.set(_.foo).to("secondValue")
     val third = second.set(_.foo).to("initialValue")
     assert(first === third)
@@ -73,7 +73,7 @@ class OpmObjectTest extends FunSuite with ShouldMatchers {
     // methods on object: notify,wait,notifyAll,toString,getClass,hashCode
     // of these, notify, wait, notifyAll, & getClass are final.
     // so it remains to understand what of toString and hashCode
-    val foo = instance[OpmTestObject]
+    val foo = instance[OpmTestObject]("")
     assert(foo.toString contains "OpmTestObject")
   }
 }

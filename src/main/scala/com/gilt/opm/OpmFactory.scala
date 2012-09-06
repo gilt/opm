@@ -18,12 +18,12 @@ trait OpmFactory {
   import OpmIntrospection._
   import OpmFactory.{introspectionMode, ModelExposeException, introspectionScratch, Scratch, recoverModel}
 
-  def instance[T <: OpmObject : Manifest]: T = {
-    newProxy(model = OpmProxy(Map(ClassField -> manifest.erasure, TimestampField -> clock())))
+  def instance[T <: OpmObject : Manifest](key: String): T = {
+    newProxy(model = OpmProxy(key, Map(ClassField -> manifest.erasure, TimestampField -> clock())))
   }
 
-  def instance[T <: OpmObject : Manifest](init: Map[String, Any]): T = {
-    newProxy(model = OpmProxy(init ++ Map(ClassField -> manifest.erasure, TimestampField -> clock())))
+  def instance[T <: OpmObject : Manifest](key: String, init: Map[String, Any]): T = {
+    newProxy(model = OpmProxy(key, init ++ Map(ClassField -> manifest.erasure, TimestampField -> clock())))
   }
 
   implicit def toSetter[T <: OpmObject : Manifest](obj: T): RichOpmObject[T] = RichOpmObject(obj, this)
@@ -60,6 +60,8 @@ trait OpmFactory {
             }
           case "timestamp" =>
             model.timestamp.asInstanceOf[AnyRef]
+          case "key" =>
+            model.key.asInstanceOf[AnyRef]
           case fieldName if method.getParameterTypes.isEmpty =>
             if (introspectionMode.get) {
               val stack = introspectionScratch.get()

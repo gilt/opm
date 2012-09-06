@@ -28,12 +28,12 @@ case class RichOpmObject[T <: OpmObject : Manifest](obj: T, factory: OpmFactory)
   import OpmFactory._
 
   private var stack: mutable.Stack[Scratch] = _
-  private lazy val model = recoverModel(obj)
+  private lazy val model = recoverModel(obj).asInstanceOf[OpmProxy]
 
   def set[V](v: T => V): RichOpmObjectSetter[T, V] = {
     try {
       introspect(v(obj))
-      stack = introspectionScratch.get
+      stack = introspectionScratch.get.asInstanceOf[mutable.Stack[Scratch]]
       require(stack != null)
       RichOpmObjectSetter(this)
     } finally {
@@ -60,7 +60,9 @@ case class RichOpmObject[T <: OpmObject : Manifest](obj: T, factory: OpmFactory)
 
   private [opm] def :=[V](v: V): T = this.to(v)
 
-  private [opm] def pruneTo[V](v: V): T = this.to(v).prune
+  private [opm] def pruneTo[V](v: V): T = {
+    new RichOpmObject[T](to(v), factory).prune
+  }
 
   private [opm] def ::=[V](v: V): T = this.pruneTo(v)
 

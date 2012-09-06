@@ -23,26 +23,25 @@ class TreeTest extends FunSuite with ShouldMatchers {
 
   test("constructing a tree should work as expected") {
 
-    val tree = instance[Node].set(_.children).pruneTo {
-      for (child <- Seq(instance[Node], instance[Node], instance[Node])) yield {
-        child.set(_.children) := Seq(instance[Node], instance[Node], instance[Node])
+    val tree = instance[Node]("").set(_.children).pruneTo {
+      for (child <- Seq(instance[Node](""), instance[Node](""), instance[Node](""))) yield {
+        child.set(_.children) := Seq(instance[Node](""), instance[Node](""), instance[Node](""))
       }
     }
     tree.toString should equal(
-      "com.gilt.opm.TreeModule$Node(" +
-        "children=List(com.gilt.opm.TreeModule$Node(" +
-        "children=List(com.gilt.opm.TreeModule$Node(), " +
-        "com.gilt.opm.TreeModule$Node(), " +
-        "com.gilt.opm.TreeModule$Node())), " +
-        "com.gilt.opm.TreeModule$Node(" +
-        "children=List(com.gilt.opm.TreeModule$Node(), " +
-        "com.gilt.opm.TreeModule$Node(), " +
-        "com.gilt.opm.TreeModule$Node())), " +
-        "com.gilt.opm.TreeModule$Node(" +
+      "com.gilt.opm.TreeModule$Node(key=," +
+        "children=List(com.gilt.opm.TreeModule$Node(key=," +
+        "children=List(com.gilt.opm.TreeModule$Node(key=,), " +
+        "com.gilt.opm.TreeModule$Node(key=,), " +
+        "com.gilt.opm.TreeModule$Node(key=,))), " +
+        "com.gilt.opm.TreeModule$Node(key=," +
+        "children=List(com.gilt.opm.TreeModule$Node(key=,), " +
+        "com.gilt.opm.TreeModule$Node(key=,), " +
+        "com.gilt.opm.TreeModule$Node(key=,))), " +
+        "com.gilt.opm.TreeModule$Node(key=," +
         "children=List(" +
-        "com.gilt.opm.TreeModule$Node(), " +
-        "com.gilt.opm.TreeModule$Node(), " +
-        "com.gilt.opm.TreeModule$Node()))))")
-    println(tree)
+        "com.gilt.opm.TreeModule$Node(key=,), " +
+        "com.gilt.opm.TreeModule$Node(key=,), " +
+        "com.gilt.opm.TreeModule$Node(key=,)))))")
   }
 }
