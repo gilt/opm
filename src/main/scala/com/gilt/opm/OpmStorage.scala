@@ -6,8 +6,15 @@ package com.gilt.opm
  * @author Eric Bowman
  * @since 9/4/12 7:07 PM
  */
-trait OpmStorage[V <: OpmObject] {
-  def get(key: String)(implicit mf: Manifest[V]): Option[V]
-  def put(obj: V)(implicit mf: Manifest[V])
+trait OpmStorage {
+  def get[V <: OpmObject](key: String)(implicit mf: Manifest[V]): Option[V]
+  def put[V <: OpmObject](obj: V)(implicit mf: Manifest[V])
   def remove(key: String)
+
+  def maybePut[V <: OpmObject](obj: V)(implicit mf: Manifest[V]) {
+    val existing = get(obj.key)
+    if (existing.isEmpty || existing.get.timestamp < obj.timestamp) {
+      put(obj)
+    }
+  }
 }

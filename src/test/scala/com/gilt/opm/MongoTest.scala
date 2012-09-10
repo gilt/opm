@@ -19,7 +19,7 @@ object MongoTest {
   }
 }
 
-class MongoTest extends FunSuite with OpmMongoStorage[MongoTest.TestDomain] {
+class MongoTest extends FunSuite with OpmMongoStorage {
   import MongoTest._
   import OpmFactory._
   val collection = MongoConnection()("opm-MongoTest")("opm")
@@ -36,7 +36,7 @@ class MongoTest extends FunSuite with OpmMongoStorage[MongoTest.TestDomain] {
     assert(obj.timeline.size === count + 1)
     put(obj)
 
-    val loaded = get(key)
+    val loaded = get[TestDomain](key)
     assert(loaded.get.id === count.toLong)
     val history = loaded.get.timeline
     assert(history.init.size === count)
@@ -45,7 +45,7 @@ class MongoTest extends FunSuite with OpmMongoStorage[MongoTest.TestDomain] {
     remove(key)
     val obj2 = history.drop(count/2).head
     put(obj2)
-    val reloaded = get(key)
+    val reloaded = get[TestDomain](key)
     assert(reloaded.get.timeline.size === obj2.timeline.size)
     assert(reloaded.get.id === count/2.toLong)
     val historyReloaded = reloaded.get.timeline
@@ -60,7 +60,7 @@ class MongoTest extends FunSuite with OpmMongoStorage[MongoTest.TestDomain] {
     put(obj)
     val obj2 = obj.set(_.id).to(5).set(_.id).to(6)
     put(obj2)
-    val obj3 = get(key).get
+    val obj3 = get[TestDomain](key).get
     for (i <- 6 to 1 by -1) {
       assert(obj3.timeline.drop(6 - i).head.id === i)
     }

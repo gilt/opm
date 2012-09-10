@@ -22,64 +22,97 @@ import java.util.{UUID, Date}
  * @since 8/22/12 12:18 PM
  */
 
-trait OpmMongoStorage[V <: OpmObject] extends OpmStorage[V] {
+trait OpmMongoStorage extends OpmStorage {
 
   import OpmFactory._
   import OpmIntrospection.{TimestampField, ClassField, MetaFields}
   import OpmMongoStorage._
 
   def collection: MongoCollection
-  def wavelength: Int = 5           // value frame + (wavelength - 1) diff frames
-  lazy val toMongoMapper: Option[PartialFunction[AnyRef, AnyRef]] = None
-  lazy val fromMongoMapper: Option[PartialFunction[AnyRef, AnyRef]] = None
 
-  private [this] lazy val defaultToMongoMapper: PartialFunction[AnyRef, AnyRef] = {
-    case s: String => s
-    case d: Date => d
-    case u: UUID => u
-    case o: OpmObject => o
-      val proxy = OpmFactory.recoverModel(o)
+  // if you want automatic storage of nested object, override this
+  def nestedToStorage(clazz: Class[_]): Option[OpmStorage] = Some(this)
+
+  def wavelength: Int = 5           // value frame + (wavelength - 1) diff frames
+  def toMongoMapper: Option[PartialFunction[(String, AnyRef), AnyRef]] = None
+  def fromMongoMapper: Option[PartialFunction[(String, AnyRef), AnyRef]] = None
+
+  private [this] lazy val defaultToMongoMapper: PartialFunction[(String, AnyRef), AnyRef] = {
+    case (f, s) if s.isInstanceOf[String] => s
+    case (f, d) if d.isInstanceOf[Date] => d
+    case (f, u) if u.isInstanceOf[UUID] => u
+    case (f, n) if n == None => None
+    case (f, some) if some.isInstanceOf[Some[_]] => Some(mapToMongo(f, some.asInstanceOf[Option[AnyRef]].get))
+    case (f, o) if o.isInstanceOf[OpmObject] =>
+      val proxy = OpmFactory.recoverModel(o.asInstanceOf[OpmObject])
       val builder = MongoDBObject.newBuilder
       builder += "_nested_opm_" -> true
       builder += Classname -> proxy.clazz.getName
       builder += Timestamp -> proxy.timestamp
-      builder ++= proxy.fields.filterNot(f => MetaFields.contains(f._1)).map(f => (f._1, mapToMongo(f._2)))
+      builder += Key -> proxy.key
+      nestedToStorage(proxy.clazz).foreach{
+        storage =>
+          storage.maybePut(o.asInstanceOf[OpmObject])(Manifest.classType(Class.forName(proxy.clazz.getName)))
+      }
       builder.result()
   }
 
-  private [this] val NestedFields = Set("_nested_opm_")
+  private [this] lazy val defaultFromMongoMapper: PartialFunction[(String, AnyRef), AnyRef] = {
+    case (f, s) if s.isInstanceOf[String] => s
+    case (f, d) if d.isInstanceOf[Date] => d
+    case (f, u) if u.isInstanceOf[UUID] => u
+    case (f, n) if n == None => None
+    case (f, some) if some.isInstanceOf[Some[_]] => Some(mapFromMongo(f, some.asInstanceOf[Some[_]].get))
+    case (f, o) if o.isInstanceOf[DBObject] && o.asInstanceOf[DBObject].get("_nested_opm_") == true =>
+      val mongoDbObject = wrapDBObj(o.asInstanceOf[DBObject])
+      val className = mongoDbObject.as[String](Classname)
+      val timestamp = mongoDbObject.as[Long](Timestamp)
+      val key = mongoDbObject.as[String](Key)
+      val clazz = Class.forName(className)
+      val loaded = nestedToStorage(clazz).map {
+        storage =>
+          storage.get(key)(Manifest.classType(clazz))
+      }.getOrElse {
+        sys.error("Could not find an OpmStorage instance for class %s".format(clazz))
+      }
+      if (loaded.isInstanceOf[Some[_]]) {
+        val maybeOpm = loaded.asInstanceOf[Some[_]].get
+        if (maybeOpm.isInstanceOf[OpmObject]) {
+          val opm = maybeOpm.asInstanceOf[OpmObject]
+          Some(opm.timeline.find(_.timestamp == timestamp).getOrElse {
+            sys.error("Could not load an object(%s, %s) with timestamp %s".format(className, key, timestamp))
+          })
+        } else {
+          sys.error("Some(%s) is not an OpmObject; can't handle this case".format(maybeOpm))
+        }
+      } else if (loaded.isInstanceOf[OpmObject]) {
+        val opm = loaded.asInstanceOf[OpmObject]
+        opm.timeline.find(_.timestamp == timestamp).getOrElse {
+          sys.error("Could not load an object(%s, %s) with timestamp %s".format(className, key, timestamp))
+        }
+      } else {
+        sys.error("Don't know how to load this object: %s".format(loaded))
+      }
+  }
 
-//  private [this] lazy val defaultFromMongoMapper: PartialFunction[AnyRef, AnyRef] = {
-//    case s: String => s
-//    case d: Date => d
-//    case u: UUID => u
-//    case o: DBObject if o.get("_nested_opm_") == true =>
-//      val mongoDbObject = wrapDBObj(o)
-//      val clazz = Class.forName(mongoDbObject.as[String]("_class_"))
-//      val timestamp = mongoDbObject.as[Long]("_ts_")
-//      val fields = mongoDbObject.keys.filterNot(NestedFields).map(key => (key -> mapFromMongo(mongoDbObject.as[AnyRef](key)))).toMap
-//      val proxy = OpmProxy(fields = fields ++ Map(ClassField -> clazz, TimestampField -> timestamp))
-//      null
-//  }
+  private [this] lazy val identity: PartialFunction[(String, AnyRef), AnyRef] = { case x => x._2 }
 
-  private [this] lazy val identity: PartialFunction[AnyRef, AnyRef] = { case x => x }
-
-  private [this] def mapToMongo(value: Any): Any = {
+  private [this] def mapToMongo(field: String, value: Any): Any = {
     value match {
       case ref: AnyRef =>
-        (toMongoMapper.map(_ orElse defaultToMongoMapper orElse identity).getOrElse(defaultToMongoMapper orElse identity))(ref)
+        (toMongoMapper.map(_ orElse defaultToMongoMapper orElse identity).getOrElse(defaultToMongoMapper orElse identity))(field, ref)
       case anyVal =>
         anyVal
     }
   }
 
-  private [this] def mapFromMongo(value: Any): Any = {
-    toMongoMapper.map(_ orElse defaultToMongoMapper orElse identity).getOrElse(defaultToMongoMapper orElse identity)
+  private [this] def mapFromMongo(field: String, value: Any): Any = {
+    fromMongoMapper.map(_ orElse defaultFromMongoMapper orElse identity).getOrElse(defaultFromMongoMapper orElse identity)(field, value.asInstanceOf[AnyRef])
   }
 
   private [this] val sortFields = MongoDBObject(Timestamp -> -1, Type -> 1)
 
-  override def put(obj: V)(implicit mf: Manifest[V]) {
+  override def put[V <: OpmObject](obj: V)(implicit mf: Manifest[V]) {
     val model: OpmProxy = recoverModel(obj)
     if (collection.findOne(MongoDBObject(Key -> model.key)).isEmpty) {
       create(model)
@@ -88,8 +121,9 @@ trait OpmMongoStorage[V <: OpmObject] extends OpmStorage[V] {
     }
   }
 
+
   // writes the model to the database.
-  private [this] def create(model: OpmProxy)(implicit mf: Manifest[V]) {
+  private [this] def create(model: OpmProxy)(implicit mf: Manifest[OpmObject]) {
     val history = (model #:: model.history)
     if (history.size > 1) {
       history.zip(history.tail).foreach(r => require(r._1.timestamp != r._2.timestamp, "Equal timestamps: %s".format(r)))
@@ -99,7 +133,7 @@ trait OpmMongoStorage[V <: OpmObject] extends OpmStorage[V] {
 
   // updates the database with the latest changes to the object.  Assumes an object with this key has already
   // been passed to the create method.
-  private [this] def update(model: OpmProxy)(implicit mf: Manifest[V]) {
+  private [this] def update(model: OpmProxy)(implicit mf: Manifest[OpmObject]) {
     // This is hard. I have a picture that might help explain this, but expect to invest some time
     // forming the mental model if you really want to understand this.
     val curStream = model #:: model.history
@@ -123,7 +157,7 @@ trait OpmMongoStorage[V <: OpmObject] extends OpmStorage[V] {
   // it can find and load the next wavelet. This strikes me as "complicated", and is an advanced
   // use of scala streams (?), and also has some memory risk.  We could obviate that possibly by
   // keeping softkeys and a mechanism to load on demand, but I guess we'll see.
-  override def get(key: String)(implicit mf: Manifest[V]): Option[V] = {
+  override def get[V <: OpmObject](key: String)(implicit mf: Manifest[V]): Option[V] = {
     val mongoStream = collection.find(MongoDBObject(Key -> key)).sort(sortFields).map(wrapDBObj(_)).toStream
     val initialDiffs = mongoStream.takeWhile(_.as[String](Type) == DiffType)
     mongoStream.dropWhile(_.as[String](Type) == DiffType).headOption.flatMap {
@@ -157,7 +191,7 @@ trait OpmMongoStorage[V <: OpmObject] extends OpmStorage[V] {
           } else {
             lazy val tail = assembleFinalObjects(stream.tail)
             val head = stream.head.copy(history = tail.map(OpmFactory.recoverModel(_)))
-            OpmFactory.newProxy(head) #:: tail
+            OpmFactory.newProxy(head).asInstanceOf[V] #:: tail
           }
         }
 
@@ -197,7 +231,7 @@ trait OpmMongoStorage[V <: OpmObject] extends OpmStorage[V] {
   private [this] def objToDiffSet(obj: MongoDBObject, direction: String): Set[Diff] = {
     require(direction == Forward || direction == Reverse,
       "direction must be either %s or %s; was %s".format(Forward, Reverse, direction))
-    wrapDBObj(obj.as[DBObject](direction)).map(kv => Diff(kv._1.toString, Option(kv._2))).toSet
+    wrapDBObj(obj.as[DBObject](direction)).map(kv => Diff(kv._1.toString, Option(kv._2).map(v => mapFromMongo(kv._1.toString, v)))).toSet
   }
 
   private [this] def toOpmProxy(key: String, valueRecord: DBObject): OpmProxy = {
@@ -207,7 +241,7 @@ trait OpmMongoStorage[V <: OpmObject] extends OpmStorage[V] {
     val record = wrapDBObj(valueRecord)
     val className = record.as[String](Classname)
     val timeStamp = record.as[Long](Timestamp)
-    opmProxy(key, className, timeStamp, fields)
+    opmProxy(key, className, timeStamp, fields.map(kv => kv._1 -> mapFromMongo(kv._1, kv._2)))
   }
 
   private [this] def opmProxy(key: String, className: String, timeStamp: Long, fields: Map[String, Any]) = {
@@ -256,20 +290,19 @@ trait OpmMongoStorage[V <: OpmObject] extends OpmStorage[V] {
     builder += Timestamp -> reverseTimestamp
     builder += ForwardTimestamp -> forwardTimestamp
 
-    // todo: encode the timestamp as a delta instead of
-    // an absolute value, to save some bytes
+    // todo: encode the timestamp as a delta instead of an absolute value, to save some bytes
     val forwardDiffBuilder = MongoDBObject.newBuilder
     forwardDiffBuilder += (TimestampField -> later.timestamp)
     builder += Forward -> forwardDiffs.foldLeft(forwardDiffBuilder) {
       case (b, Diff(field, newValueType)) =>
-        b += field -> newValueType
+        b += field -> mapToMongo(field, newValueType)
         b
     }.result()
     val reverseDiffBuilder = MongoDBObject.newBuilder
     reverseDiffBuilder += (TimestampField -> earlier.timestamp)
     builder += Reverse -> reverseDiffs.foldLeft(reverseDiffBuilder) {
       case (b, Diff(field, newValueType)) =>
-        b += field -> newValueType
+        b += field -> mapToMongo(field, newValueType)
         b
     }.result()
     collection += builder.result()
@@ -290,9 +323,9 @@ trait OpmMongoStorage[V <: OpmObject] extends OpmStorage[V] {
     builder += Classname -> fields(ClassField).asInstanceOf[Class[_]].getName
     builder += Instance -> fields.filterNot(f => MetaFields(f._1)).foldLeft(MongoDBObject.newBuilder) {
       case (b, f) =>
-        b += f
+        b += f._1 -> mapToMongo(f._1, f._2)
         b
-    }.result()
+    }.result
     collection += builder.result()
   }
 }
