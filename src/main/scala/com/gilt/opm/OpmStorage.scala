@@ -7,8 +7,7 @@ package com.gilt.opm
  * @since 9/4/12 7:07 PM
  */
 trait OpmStorage[V <: OpmObject] {
-  def create(obj: V)(implicit mf: Manifest[V])
-  def retrieve(key: String)(implicit mf: Manifest[V]): Option[V]
-  def update(obj: V)(implicit mf: Manifest[V])
-  def delete(key: String)
+  def get(key: String)(implicit mf: Manifest[V]): Option[V]
+  def put(obj: V)(implicit mf: Manifest[V])
+  def remove(key: String)
 }

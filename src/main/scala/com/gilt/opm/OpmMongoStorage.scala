@@ -49,18 +49,18 @@ trait OpmMongoStorage[V <: OpmObject] extends OpmStorage[V] {
 
   private [this] val NestedFields = Set("_nested_opm_")
 
-  private [this] lazy val defaultFromMongoMapper: PartialFunction[AnyRef, AnyRef] = {
-    case s: String => s
-    case d: Date => d
-    case u: UUID => u
-    case o: DBObject if o.get("_nested_opm_") == true =>
-      val mongoDbObject = wrapDBObj(o)
-      val clazz = Class.forName(mongoDbObject.as[String]("_class_"))
-      val timestamp = mongoDbObject.as[Long]("_ts_")
-      val fields = mongoDbObject.keys.filterNot(NestedFields).map(key => (key -> mapFromMongo(mongoDbObject.as[AnyRef](key)))).toMap
-      // val proxy = OpmProxy(fields = fields ++ Map(ClassField -> clazz, TimestampField -> timestamp))
-      null
-  }
+//  private [this] lazy val defaultFromMongoMapper: PartialFunction[AnyRef, AnyRef] = {
+//    case s: String => s
+//    case d: Date => d
+//    case u: UUID => u
+//    case o: DBObject if o.get("_nested_opm_") == true =>
+//      val mongoDbObject = wrapDBObj(o)
+//      val clazz = Class.forName(mongoDbObject.as[String]("_class_"))
+//      val timestamp = mongoDbObject.as[Long]("_ts_")
+//      val fields = mongoDbObject.keys.filterNot(NestedFields).map(key => (key -> mapFromMongo(mongoDbObject.as[AnyRef](key)))).toMap
+//      val proxy = OpmProxy(fields = fields ++ Map(ClassField -> clazz, TimestampField -> timestamp))
+//      null
+//  }
 
   private [this] lazy val identity: PartialFunction[AnyRef, AnyRef] = { case x => x }
 
@@ -79,15 +79,39 @@ trait OpmMongoStorage[V <: OpmObject] extends OpmStorage[V] {
 
   private [this] val sortFields = MongoDBObject(Timestamp -> -1, Type -> 1)
 
-  // writes the model to the database.
-  override def create(obj: V)(implicit mf: Manifest[V]) {
+  override def put(obj: V)(implicit mf: Manifest[V]) {
     val model: OpmProxy = recoverModel(obj)
-    require(collection.findOne(MongoDBObject(Key -> model.key)).isEmpty, "An object with key %s already exists".format(model.key))
+    if (collection.findOne(MongoDBObject(Key -> model.key)).isEmpty) {
+      create(model)
+    } else {
+      update(model)
+    }
+  }
+
+  // writes the model to the database.
+  private [this] def create(model: OpmProxy)(implicit mf: Manifest[V]) {
     val history = (model #:: model.history)
     if (history.size > 1) {
       history.zip(history.tail).foreach(r => require(r._1.timestamp != r._2.timestamp, "Equal timestamps: %s".format(r)))
     }
     writeWavelets(model.key, history)
+  }
+
+  // updates the database with the latest changes to the object.  Assumes an object with this key has already
+  // been passed to the create method.
+  private [this] def update(model: OpmProxy)(implicit mf: Manifest[V]) {
+    // This is hard. I have a picture that might help explain this, but expect to invest some time
+    // forming the mental model if you really want to understand this.
+    val curStream = model #:: model.history
+    val mongoStream = collection.find(MongoDBObject(Key -> model.key)).sort(sortFields).toStream.map(wrapDBObj(_))
+    val lastFrame  = mongoStream.take(wavelength)
+    require(!lastFrame.isEmpty, "No mongo records found for key %s; did you create first?".format(model.key))
+    val oldPhase = (wavelength + lastFrame.takeWhile(_.as[String](Type) == DiffType).size) % wavelength
+    val updateSize = curStream.takeWhile(_.timestamp > lastFrame.head.as[Long](Timestamp)).size
+    val startPhase = (wavelength - (updateSize % wavelength) + oldPhase) % wavelength
+    val initialDiffCount = (wavelength - startPhase) % wavelength
+    writeDiffs(model.key, curStream.zip(curStream.tail).take(initialDiffCount))
+    writeWavelets(model.key, curStream.drop(initialDiffCount).take(updateSize - initialDiffCount))
   }
 
   // when we retrieve by a key, we always load back to the first value frame.  So that may mean
@@ -99,7 +123,7 @@ trait OpmMongoStorage[V <: OpmObject] extends OpmStorage[V] {
   // it can find and load the next wavelet. This strikes me as "complicated", and is an advanced
   // use of scala streams (?), and also has some memory risk.  We could obviate that possibly by
   // keeping softkeys and a mechanism to load on demand, but I guess we'll see.
-  override def retrieve(key: String)(implicit mf: Manifest[V]): Option[V] = {
+  override def get(key: String)(implicit mf: Manifest[V]): Option[V] = {
     val mongoStream = collection.find(MongoDBObject(Key -> key)).sort(sortFields).map(wrapDBObj(_)).toStream
     val initialDiffs = mongoStream.takeWhile(_.as[String](Type) == DiffType)
     mongoStream.dropWhile(_.as[String](Type) == DiffType).headOption.flatMap {
@@ -141,26 +165,9 @@ trait OpmMongoStorage[V <: OpmObject] extends OpmStorage[V] {
     }
   }
 
-  // updates the database with the latest changes to the object.  Assumes an object with this key has already
-  // been passed to the create method.
-  override def update(obj: V)(implicit mf: Manifest[V]) {
-    // This is hard. I have a picture that might help explain this, but expect to invest some time
-    // forming the mental model if you really want to understand this.
-    val model: OpmProxy = recoverModel(obj)
-    val curStream = model #:: model.history
-    val mongoStream = collection.find(MongoDBObject(Key -> model.key)).sort(sortFields).toStream.map(wrapDBObj(_))
-    val lastFrame  = mongoStream.take(wavelength)
-    require(!lastFrame.isEmpty, "No mongo records found for key %s; did you create first?".format(model.key))
-    val oldPhase = (wavelength + lastFrame.takeWhile(_.as[String](Type) == DiffType).size) % wavelength
-    val updateSize = curStream.takeWhile(_.timestamp > lastFrame.head.as[Long](Timestamp)).size
-    val startPhase = (wavelength - (updateSize % wavelength) + oldPhase) % wavelength
-    val initialDiffCount = (wavelength - startPhase) % wavelength
-    writeDiffs(model.key, curStream.zip(curStream.tail).take(initialDiffCount))
-    writeWavelets(model.key, curStream.drop(initialDiffCount).take(updateSize - initialDiffCount))
-  }
 
   // deletes all records with the given key, doing nothing if the key doesn't exist.
-  override def delete(key: String) {
+  override def remove(key: String) {
     collection.remove(MongoDBObject(Key -> key))
   }
 
