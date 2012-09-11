@@ -62,7 +62,8 @@ trait OpmMongoStorage extends OpmStorage {
     case (_, _, d) if d.isInstanceOf[Date] => d
     case (_, _, u) if u.isInstanceOf[UUID] => u
     case (_, _, n) if n == None => None
-    case (field, fieldClassOpt, some) if some.isInstanceOf[Some[_]] => Some(mapFromMongo(field, fieldClassOpt, some.asInstanceOf[Some[_]].get))
+    case (field, fieldClassOpt, some) if some.isInstanceOf[Some[_]] =>
+      mapFromMongo(field, fieldClassOpt, some.asInstanceOf[Some[_]].get).asInstanceOf[AnyRef]
     case (field, fieldClassOpt, o) if o.isInstanceOf[DBObject] && o.asInstanceOf[DBObject].get("_nested_opm_") == true =>
       val mongoDbObject = wrapDBObj(o.asInstanceOf[DBObject])
       val className = mongoDbObject.as[String](Classname)
@@ -77,23 +78,9 @@ trait OpmMongoStorage extends OpmStorage {
       }
       loadedOpt.map {
         opm =>
-          // do we know to adapt to a particular return type?
-
-          val finalOpm = opm.timeline.find(_.timestamp == timestamp).getOrElse {
+          opm.timeline.find(_.timestamp == timestamp).getOrElse {
               sys.error("Could not load an object(%s, %s) with timestamp %s".format(className, key, timestamp))
           }
-
-          val result = fieldClassOpt.map {
-            case option if option.isAssignableFrom(classOf[Option[_]]) =>
-              Some(finalOpm)
-            case normal if normal.isAssignableFrom(finalOpm.getClass) =>
-              finalOpm
-            case unknown =>
-              sys.error("Cannot assign %s to field %s with type %s".format(finalOpm, field, unknown))
-          }.getOrElse {
-            sys.error("Could not load an object(%s, %s) with timestamp %s".format(className, key, timestamp))
-          }
-          result
       }.getOrElse {
         sys.error("Could not figure out how to load (%s, %s, %s)".format(field, fieldClassOpt, o))
       }
@@ -111,7 +98,18 @@ trait OpmMongoStorage extends OpmStorage {
   }
 
   private [this] def mapFromMongo(field: String, fieldType: Option[Class[_]], value: Any): Any = {
-    fromMongoMapper.map(_ orElse defaultFromMongoMapper orElse identity).getOrElse(defaultFromMongoMapper orElse identity)(field, fieldType, value.asInstanceOf[AnyRef])
+    val isOption = fieldType.isDefined && fieldType.get.isAssignableFrom(classOf[Option[_]])
+
+    Option(value).map { _ =>
+      val result = fromMongoMapper.map(_ orElse defaultFromMongoMapper orElse identity).getOrElse(defaultFromMongoMapper orElse identity)(field, fieldType, value.asInstanceOf[AnyRef])
+      Option(result).map { _ =>
+        if (isOption)  Some(result) else result
+      }.getOrElse {
+        if (isOption) None else null
+      }
+    }.getOrElse {
+      if (isOption) None else null
+    }
   }
 
   private [this] val sortFields = MongoDBObject(Timestamp -> -1, Type -> 1)
@@ -241,7 +239,8 @@ trait OpmMongoStorage extends OpmStorage {
   private [this] def toOpmProxy(key: String, valueRecord: DBObject): OpmProxy = {
     require(valueRecord.get(Type) == ValueType, "Record was not value record: %s".format(valueRecord))
     val instance = wrapDBObj(valueRecord.get(Instance).asInstanceOf[DBObject])
-    val fields = (for (key <- instance.keys) yield key -> instance(key)).toMap
+    // casbah blows an exception if you do instance(key) and expect a null value back.
+    val fields = instance.keys.map(key => instance.get(key).map(key -> _).getOrElse(key -> null)).toMap
     val record = wrapDBObj(valueRecord)
     val clazz = Class.forName(record.as[String](Classname))
     val timeStamp = record.as[Long](Timestamp)

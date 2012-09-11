@@ -2,7 +2,6 @@ package com.gilt.opm
 
 import org.scalatest.FunSuite
 import com.mongodb.casbah.MongoConnection
-import com.mongodb.casbah.commons.MongoDBObject
 
 /**
  * Document Me.
@@ -91,7 +90,6 @@ class NestedNonMongoTest extends FunSuite with OpmMongoStorage {
     {
       case maybeB if maybeB._1 == "b" =>
         val m = wrapDBObj(maybeB._3.asInstanceOf[DBObject])
-        Some(
           BImpl(
             name = m.as[String]("name"),
             {
@@ -103,7 +101,7 @@ class NestedNonMongoTest extends FunSuite with OpmMongoStorage {
                 })
               }
             }
-            ))
+            )
     }
   )
 
