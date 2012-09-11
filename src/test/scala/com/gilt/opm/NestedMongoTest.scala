@@ -25,15 +25,24 @@ object NestedMongoTest {
 
   trait C {
     def name: String
+    def d: D
+  }
+
+  trait D {
+    def name: String
   }
 
   trait OpmB extends B with OpmObject
 
   trait OpmC extends C with OpmObject
 
+  trait OpmD extends D with OpmObject
+
   case class BImpl(name: String, c: Option[C] = None) extends B
 
-  case class CImpl(name: String) extends C
+  case class CImpl(name: String, d: D) extends C
+
+  case class DImpl(name: String) extends D
 }
 
 class NestedOpmMongoTest extends FunSuite with OpmMongoStorage {
@@ -43,7 +52,8 @@ class NestedOpmMongoTest extends FunSuite with OpmMongoStorage {
   collection.drop()
 
   test("OpmObject nesting") {
-    val c = instance[OpmC]("c").set(_.name).to("hello, C")
+    val d = instance[OpmD]("d").set(_.name).to("hello, D")
+    val c = instance[OpmC]("c", Map("name" -> "hello, C", "d" -> d))
     val b = instance[OpmB]("b").set(_.name).to("hello, B").set(_.c).to(Some(c))
     val a = instance[OpmA]("a").set(_.id).to(3).set(_.b).to(Some(b))
     put(a)
@@ -52,6 +62,7 @@ class NestedOpmMongoTest extends FunSuite with OpmMongoStorage {
     assert(loadedA.get === a)
     assert(loadedA.get.b.get === b)
     assert(loadedA.get.b.get.c.get === c)
+    assert(loadedA.get.b.get.c.get.d === d)
   }
 }
 
@@ -65,29 +76,40 @@ class NestedNonMongoTest extends FunSuite with OpmMongoStorage {
   val collection = MongoConnection()("opm-MongoTest")("nested-non-opm")
   collection.drop()
 
-  override def toMongoMapper: Option[PartialFunction[(String, AnyRef), AnyRef]] =
+  override def toMongoMapper: Option[PartialFunction[(String, Option[Class[_]], AnyRef), AnyRef]] =
     Some {
       {
-        case maybeB if maybeB._2.isInstanceOf[B] => {
-          val b = maybeB._2.asInstanceOf[B]
-          val fields = Seq(Some("name" -> b.name), b.c.map("c" -> _)).flatten
+        case maybeB if maybeB._3.isInstanceOf[B] => {
+          val b = maybeB._3.asInstanceOf[B]
+          val fields = Seq(Some("name" -> b.name), b.c.map(
+            c => "c" -> MongoDBObject("name" -> c.name, "d" -> MongoDBObject("name" -> c.d.name)))).flatten
           MongoDBObject(fields:_*)
         }
       }
     }
-  override def fromMongoMapper: Option[PartialFunction[(String, AnyRef), AnyRef]] = Some(
+  override def fromMongoMapper: Option[PartialFunction[(String, Option[Class[_]], AnyRef), AnyRef]] = Some(
     {
       case maybeB if maybeB._1 == "b" =>
-        val m = wrapDBObj(maybeB._2.asInstanceOf[DBObject])
+        val m = wrapDBObj(maybeB._3.asInstanceOf[DBObject])
         Some(
           BImpl(
             name = m.as[String]("name"),
-            c = m.getAs[BasicDBList]("c").map(n => CImpl(name = n.get(0).asInstanceOf[String]))))
+            {
+              val c = m.getAs[BasicDBObject]("c")
+              c.map {
+                cObj => CImpl(name = cObj.get("name").toString, d = {
+                  val dObj = cObj.get("d").asInstanceOf[BasicDBObject]
+                  DImpl(name = dObj.get("name").toString)
+                })
+              }
+            }
+            ))
     }
   )
 
-  test("OpmObject nesting") {
-    val c = CImpl(name = "Hi, I'm a C.")
+  test("non-OpmObject nesting") {
+    val d = DImpl(name = "Hi, I'm a D.")
+    val c = CImpl(name = "Hi, I'm a C.", d)
     val b = BImpl(name = "Hi, I'm a B.", c = Some(c))
     val a = instance[OpmA]("a").set(_.id).to(3).set(_.b).to(Some(b))
 
@@ -97,6 +119,7 @@ class NestedNonMongoTest extends FunSuite with OpmMongoStorage {
     assert(loadedA.get === a)
     assert(loadedA.get.b.get === b)
     assert(loadedA.get.b.get.c.get === c)
+    assert(loadedA.get.b.get.c.get.d === d)
   }
 
 }
