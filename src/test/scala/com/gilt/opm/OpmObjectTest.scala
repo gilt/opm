@@ -23,6 +23,7 @@ object OpmObjectTest {
     def aLong: Long
     def aFloat: Float
     def aDouble: Double
+    def aBoolean: Boolean
   }
 }
 
@@ -44,7 +45,8 @@ class OpmObjectTest extends FunSuite with ShouldMatchers {
       set(_.aInt).to(4).
       set(_.aLong).to(5.asInstanceOf[Long]).
       set(_.aFloat).to(6.asInstanceOf[Float]).
-      set(_.aDouble).to(7.asInstanceOf[Double])
+      set(_.aDouble).to(7.asInstanceOf[Double]).
+      set(_.aBoolean).to(true)
 
     assert(fixture.aByte === 1.asInstanceOf[Byte])
     assert(fixture.aChar === 2.asInstanceOf[Char])
@@ -53,6 +55,7 @@ class OpmObjectTest extends FunSuite with ShouldMatchers {
     assert(fixture.aLong === 5.asInstanceOf[Long])
     assert(fixture.aFloat === 6.asInstanceOf[Float])
     assert(fixture.aDouble === 7.asInstanceOf[Double])
+    assert(fixture.aBoolean === true)
   }
 
   test("equality & hashCode") {

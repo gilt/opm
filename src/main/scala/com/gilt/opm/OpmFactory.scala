@@ -78,6 +78,7 @@ trait OpmFactory {
                   case "long" => 0.asInstanceOf[Long]
                   case "float" => 0.asInstanceOf[Float]
                   case "double" => 0.asInstanceOf[Double]
+                  case "boolean" => false
                   case _ => null
                 }).asInstanceOf[AnyRef]
               }
