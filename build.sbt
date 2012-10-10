@@ -1,6 +1,8 @@
+gilt.GiltProject.jarSettings
+
 name := "opm"
 
-scalaVersion := "2.9.1"
+organization := "com.giltgroupe"
 
 libraryDependencies ++= Seq(
   "com.giltgroupe" % "commons-mongo" % "0.0.1",
@@ -11,9 +13,4 @@ libraryDependencies ++= Seq(
   "org.scalacheck" %% "scalacheck" % "1.9" % "test"
 )
 
-crossPaths := false
-
-releaseSettings
-
-gilt.Publish.settings
 
