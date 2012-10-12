@@ -42,9 +42,22 @@ case class RichOpmObject[T <: OpmObject : Manifest](obj: T, factory: OpmFactory)
   }
 
   private [opm] def to[V](v: V): T = {
+    // things fall down around options ... sometimes a Some ends up here,
+    // and sometimes the thing it wraps, depending on the context. So if the value
+    // is not a Some, and the thing it is being stored to is an Option, then wrap it here.
+    def wrap(scratch: Scratch, value: Any): Any = {
+      // we may need to wrap this value in Some if the method return
+      // type says to. Unfortunately containers are a pain with type erasure
+      if (!value.asInstanceOf[AnyRef].getClass.isAssignableFrom(classOf[Some[_]]) &&
+        scratch.model.fieldMethod(scratch.field).getReturnType.isAssignableFrom(classOf[Option[_]])) {
+        Option(value)
+      } else {
+        value
+      }
+    }
     @tailrec
     def populate(scratch: Scratch, value: Any): AnyRef = {
-      val newFields = scratch.model.fields + (scratch.field -> value)
+      val newFields = scratch.model.fields + (scratch.field -> wrap(scratch, value))
       val newModel = scratch.model.copy(fields = newFields, history = scratch.model #:: scratch.model.history)
       val newInstance = factory.instance(newModel)(new Manifest[OpmObject] {
         override val erasure = scratch.clazz

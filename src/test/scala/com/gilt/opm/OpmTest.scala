@@ -17,7 +17,7 @@ object OpmTest {
 
     def name: String
 
-    def bar: Bar
+    def bar: Option[Bar]
   }
 
   trait SubFoo extends Foo {}
@@ -28,12 +28,15 @@ object OpmTest {
     def things: Set[String]
   }
 
+  trait MixOfOptionalNonOptional extends OpmObject {
+    def name: String
+    def value: Option[String]
+  }
 }
-
 
 class OpmTest extends FunSuite with ShouldMatchers with OpmFactory {
 
-  import OpmTest.{Foo, Bar, SubFoo}
+  import OpmTest.{Foo, Bar, SubFoo, MixOfOptionalNonOptional}
 
   var time = 0l
 
@@ -48,12 +51,13 @@ class OpmTest extends FunSuite with ShouldMatchers with OpmFactory {
     val foo2 = foo.set(_.name) := "test"
     assert(foo2.name === "test")
 
-    val foo3 = foo2.set(_.bar).to(instance[Bar](""))
-    val foo4 = foo3.set(_.bar.name).to("a bar")
-    assert(foo4.bar.name === "a bar")
+    val foo3 = foo2.set(_.bar).to(Some(instance[Bar]("")))
+    val foo4 = foo3.set(_.bar.get.name).to("a bar")
 
-    val foo5 = foo4.set(_.bar.things) to (Set("a,b,c".split(","): _*))
-    assert(foo5.bar.things === Set("a", "b", "c"))
+    assert(foo4.bar.get.name === "a bar")
+
+    val foo5 = foo4.set(_.bar.get.things) to (Set("a,b,c".split(","): _*))
+    assert(foo5.bar.get.things === Set("a", "b", "c"))
   }
 
   test("set id") {
@@ -67,7 +71,6 @@ class OpmTest extends FunSuite with ShouldMatchers with OpmFactory {
     val init = (empty set (_.name) := "init")
     val pruned = init.set(_.name).to("ready").prune
     assert(pruned.timeline.size === 1)
-
   }
 
   test("forceCurrent") {
@@ -124,16 +127,7 @@ class OpmTest extends FunSuite with ShouldMatchers with OpmFactory {
   }
 
   test("evolve removing a field") {
-    val a = instance[Foo]("", Map("name" -> "a", "id" -> 0l))
-    val b = instance[Foo]("", Map("name" -> "b"))
-
-    val fromAtoB = b diff a
-    val bp = a evolve fromAtoB
-    assert(bp === b)
-  }
-
-  test("evolve adding a field") {
-    val a = instance[Foo]("", Map("name" -> "a"))
+    val a = instance[Foo]("", Map("name" -> "a", "id" -> 0l, "bar" -> instance[Bar]("", Map("name" -> "bar", "things" -> Set("pub")))))
     val b = instance[Foo]("", Map("name" -> "b", "id" -> 1l))
 
     val fromAtoB = b diff a
@@ -141,8 +135,17 @@ class OpmTest extends FunSuite with ShouldMatchers with OpmFactory {
     assert(bp === b)
   }
 
+  test("evolve adding a field") {
+    val a = instance[Foo]("", Map("name" -> "a", "id" -> 0l))
+    val b = instance[Foo]("", Map("name" -> "b", "id" -> 1l, "bar" -> instance[Bar]("", Map("name" -> "bar", "things" -> Set("pub")))))
+
+    val fromAtoB = b diff a
+    val bp = a evolve fromAtoB
+    assert(bp === b)
+  }
+
   test("identical evolution") {
-    val a = instance[Foo]("", Map("name" -> "a"))
+    val a = instance[Foo]("", Map("name" -> "a", "id" -> 0l))
     val b = a
 
     val fromAtoB = b diff a
@@ -176,5 +179,13 @@ class OpmTest extends FunSuite with ShouldMatchers with OpmFactory {
     evaluating {
       instance[Foo]("") diff instance[SubFoo]("")
     } should produce[RuntimeException]
+  }
+
+  test("required fields present") {
+    instance[MixOfOptionalNonOptional]("", Map("name" -> "eric"))
+    instance[MixOfOptionalNonOptional]("", Map("name" -> "eric", "value" -> Some("skibum") ))
+    evaluating {
+      instance[MixOfOptionalNonOptional]("", Map("value" -> Some("skibum") ))
+    } should produce[IllegalArgumentException]
   }
 }

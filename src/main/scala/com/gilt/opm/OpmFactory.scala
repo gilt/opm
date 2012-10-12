@@ -23,6 +23,11 @@ trait OpmFactory {
   }
 
   def instance[T <: OpmObject : Manifest](key: String, init: Map[String, Any]): T = {
+
+    // new in 0.0.10: anything that is non-optional, MUST be set.
+    // no nulls allowed.
+    val missing = missingFields(init)
+    require(missing.isEmpty, "Not all required field set: %s".format(missing.mkString(",")))
     newProxy(model = OpmProxy(key, init ++ Map(ClassField -> manifest.erasure, TimestampField -> clock())))
   }
 
@@ -30,6 +35,18 @@ trait OpmFactory {
 
   private[opm] def instance[T <: OpmObject : Manifest](model: OpmProxy): T = {
     newProxy(model.copy(fields = model.fields + (TimestampField -> clock())))
+  }
+
+  // precompute field names of this object
+  private [this] lazy val opmFieldNames = classOf[OpmObject].getMethods.map(_.getName).toSet
+
+  // get hold of methods of this object
+  private [opm] def fields[T <: OpmObject : Manifest]: Array[Method] =
+    manifest.erasure.getMethods.filterNot(m => opmFieldNames.contains(m.getName))
+
+  // return an array of fields not set in this map
+  private [opm] def missingFields[T <: OpmObject : Manifest](init: Map[String, Any]): Array[String] = {
+    fields.filterNot(_.getReturnType.isAssignableFrom((classOf[Option[_]]))).map(_.getName).filterNot(init.contains)
   }
 
   private[opm] def newProxy[T: Manifest](model: OpmProxy): T = {
