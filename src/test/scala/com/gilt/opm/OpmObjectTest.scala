@@ -25,6 +25,10 @@ object OpmObjectTest {
     def aDouble: Double
     def aBoolean: Boolean
   }
+
+  trait PotentiallyReservedMethods extends OpmObject {
+    def key: String
+  }
 }
 
 class OpmObjectTest extends FunSuite with ShouldMatchers {
@@ -78,5 +82,14 @@ class OpmObjectTest extends FunSuite with ShouldMatchers {
     // so it remains to understand what of toString and hashCode
     val foo = instance[OpmTestObject]("")
     assert(foo.toString contains "OpmTestObject")
+  }
+
+  test("potentially reserved methods") {
+    evaluating {
+      instance[PotentiallyReservedMethods]("").set(_.key).to("key")
+    } should produce[RuntimeException]
+    evaluating {
+      instance[PotentiallyReservedMethods]("").set(_.timestamp).to(0)
+    } should produce[RuntimeException]
   }
 }

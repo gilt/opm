@@ -76,9 +76,17 @@ trait OpmFactory {
               false.asInstanceOf[AnyRef]
             }
           case "timestamp" =>
-            model.timestamp.asInstanceOf[AnyRef]
+            if (introspectionMode.get) {
+              sys.error("set(_.timestamp).to(...) is not allowed (timestamps are immutable)")
+            } else {
+              model.timestamp.asInstanceOf[AnyRef]
+            }
           case "key" =>
-            model.key.asInstanceOf[AnyRef]
+            if (introspectionMode.get) {
+              sys.error("set(_.key).to(...) is not allowed (key is a property of the timeline, not an instance)")
+            } else {
+              model.key.asInstanceOf[AnyRef]
+            }
           case fieldName if method.getParameterTypes.isEmpty =>
             if (introspectionMode.get) {
               val stack = introspectionScratch.get()
