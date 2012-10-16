@@ -12,8 +12,8 @@ trait OpmStorage {
   def remove(key: String)
 
   def maybePut[V <: OpmObject](obj: V)(implicit mf: Manifest[V]) {
-    val existing = get(obj.key)
-    if (existing.isEmpty || existing.get.timestamp < obj.timestamp) {
+    val existing = get(obj.opmKey)
+    if (existing.isEmpty || existing.get.opmTimestamp < obj.opmTimestamp) {
       put(obj)
     }
   }

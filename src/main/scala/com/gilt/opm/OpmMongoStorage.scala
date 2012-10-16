@@ -78,8 +78,8 @@ trait OpmMongoStorage extends OpmStorage {
       }
       loadedOpt.map {
         opm =>
-          opm.timeline.find(_.timestamp == timestamp).getOrElse {
-              sys.error("Could not load an object(%s, %s) with timestamp %s".format(className, key, timestamp))
+          opm.timeline.find(_.opmTimestamp == timestamp).getOrElse {
+              sys.error("Could not load an object(%s, %s) with opmTimestamp %s".format(className, key, timestamp))
           }
       }.getOrElse {
         sys.error("Could not figure out how to load (%s, %s, %s)".format(field, fieldClassOpt, o))

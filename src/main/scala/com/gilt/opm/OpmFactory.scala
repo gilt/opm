@@ -56,7 +56,7 @@ trait OpmFactory {
     val proxy = Proxy.newProxyInstance(clazz.getClassLoader, clazz +: clazz.getInterfaces, new InvocationHandler() {
       def invoke(proxy: Object, method: Method, args: scala.Array[Object]): AnyRef = {
         method.getName match {
-          case "magic" =>
+          case "opmMagic" =>
             if (introspectionMode.get) {
               throw ModelExposeException(model)
             } else {
@@ -75,15 +75,15 @@ trait OpmFactory {
             } else {
               false.asInstanceOf[AnyRef]
             }
-          case "timestamp" =>
+          case "opmTimestamp" =>
             if (introspectionMode.get) {
-              sys.error("set(_.timestamp).to(...) is not allowed (timestamps are immutable)")
+              sys.error("set(_.opmTimestamp).to(...) is not allowed (timestamps are immutable)")
             } else {
               model.timestamp.asInstanceOf[AnyRef]
             }
-          case "key" =>
+          case "opmKey" =>
             if (introspectionMode.get) {
-              sys.error("set(_.key).to(...) is not allowed (key is a property of the timeline, not an instance)")
+              sys.error("set(_.opmKey).to(...) is not allowed (opmKey is a property of the timeline, not an instance)")
             } else {
               model.key.asInstanceOf[AnyRef]
             }
@@ -146,7 +146,7 @@ object OpmFactory extends OpmFactory {
 
   private [opm] def recoverModel[T <: OpmObject](obj: T): OpmProxy = {
     try {
-      introspect(obj.magic())
+      introspect(obj.opmMagic())
       sys.error("never executes")
     } catch {
       case ModelExposeException(model) => model

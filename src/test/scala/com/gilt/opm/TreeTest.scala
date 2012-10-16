@@ -29,19 +29,19 @@ class TreeTest extends FunSuite with ShouldMatchers {
       }
     }
     tree.toString should equal(
-      "com.gilt.opm.TreeModule$Node(key=," +
-        "children=List(com.gilt.opm.TreeModule$Node(key=," +
-        "children=List(com.gilt.opm.TreeModule$Node(key=,), " +
-        "com.gilt.opm.TreeModule$Node(key=,), " +
-        "com.gilt.opm.TreeModule$Node(key=,))), " +
-        "com.gilt.opm.TreeModule$Node(key=," +
-        "children=List(com.gilt.opm.TreeModule$Node(key=,), " +
-        "com.gilt.opm.TreeModule$Node(key=,), " +
-        "com.gilt.opm.TreeModule$Node(key=,))), " +
-        "com.gilt.opm.TreeModule$Node(key=," +
+      "com.gilt.opm.TreeModule$Node(opmKey=," +
+        "children=List(com.gilt.opm.TreeModule$Node(opmKey=," +
+        "children=List(com.gilt.opm.TreeModule$Node(opmKey=,), " +
+        "com.gilt.opm.TreeModule$Node(opmKey=,), " +
+        "com.gilt.opm.TreeModule$Node(opmKey=,))), " +
+        "com.gilt.opm.TreeModule$Node(opmKey=," +
+        "children=List(com.gilt.opm.TreeModule$Node(opmKey=,), " +
+        "com.gilt.opm.TreeModule$Node(opmKey=,), " +
+        "com.gilt.opm.TreeModule$Node(opmKey=,))), " +
+        "com.gilt.opm.TreeModule$Node(opmKey=," +
         "children=List(" +
-        "com.gilt.opm.TreeModule$Node(key=,), " +
-        "com.gilt.opm.TreeModule$Node(key=,), " +
-        "com.gilt.opm.TreeModule$Node(key=,)))))")
+        "com.gilt.opm.TreeModule$Node(opmKey=,), " +
+        "com.gilt.opm.TreeModule$Node(opmKey=,), " +
+        "com.gilt.opm.TreeModule$Node(opmKey=,)))))")
   }
 }

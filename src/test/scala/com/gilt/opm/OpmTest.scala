@@ -89,7 +89,7 @@ class OpmTest extends FunSuite with ShouldMatchers with OpmFactory {
   test("timestamp") {
     val before = clock()
     val a = instance[Foo]("").set(_.name) := "a"
-    assert(a.timestamp === before + 2)
+    assert(a.opmTimestamp === before + 2)
   }
 
   test("branching") {
@@ -113,7 +113,7 @@ class OpmTest extends FunSuite with ShouldMatchers with OpmFactory {
     foo = foo.set(_.name) := "c"
     foo = foo.set(_.name) := "d"
 
-    val b = foo.timeline.dropWhile(_.timestamp >= beforeC)
+    val b = foo.timeline.dropWhile(_.opmTimestamp >= beforeC)
     assert(b.head === instance[Foo]("").set(_.name).to("b"))
   }
 

@@ -27,18 +27,18 @@ object OpmObjectTest {
   }
 
   trait PotentiallyReservedMethods extends OpmObject {
-    def key: String
+    def opmKey: String
   }
 }
 
 class OpmObjectTest extends FunSuite with ShouldMatchers {
   import OpmObjectTest._
   import OpmFactory._
-  test("magic") {
-    // confirm calling magic always sucks
+  test("opmMagic") {
+    // confirm calling opmMagic always sucks
     val testObj = instance[OpmTestObject]("")
-    evaluating(testObj.magic()) should produce[RuntimeException]
-    evaluating(new OpmObject{}.magic()) should produce[RuntimeException]
+    evaluating(testObj.opmMagic()) should produce[RuntimeException]
+    evaluating(new OpmObject{}.opmMagic()) should produce[RuntimeException]
   }
 
   test("native types") {
@@ -86,10 +86,10 @@ class OpmObjectTest extends FunSuite with ShouldMatchers {
 
   test("potentially reserved methods") {
     evaluating {
-      instance[PotentiallyReservedMethods]("").set(_.key).to("key")
+      instance[PotentiallyReservedMethods]("").set(_.opmKey).to("opmKey")
     } should produce[RuntimeException]
     evaluating {
-      instance[PotentiallyReservedMethods]("").set(_.timestamp).to(0)
+      instance[PotentiallyReservedMethods]("").set(_.opmTimestamp).to(0)
     } should produce[RuntimeException]
   }
 }

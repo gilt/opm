@@ -57,7 +57,7 @@ class NestedOpmMongoTest extends FunSuite with OpmMongoStorage {
     val a = instance[OpmA]("a").set(_.id).to(3).set(_.b).to(Some(b))
     put(a)
 
-    val loadedA = get[OpmA](a.key)
+    val loadedA = get[OpmA](a.opmKey)
     assert(loadedA.get === a)
     assert(loadedA.get.b.get === b)
     assert(loadedA.get.b.get.c.get === c)
@@ -113,7 +113,7 @@ class NestedNonMongoTest extends FunSuite with OpmMongoStorage {
 
     put(a)
 
-    val loadedA = get[OpmA](a.key)
+    val loadedA = get[OpmA](a.opmKey)
     assert(loadedA.get === a)
     assert(loadedA.get.b.get === b)
     assert(loadedA.get.b.get.c.get === c)
