@@ -127,10 +127,8 @@ object OpmFactory extends OpmFactory {
 
   private [opm] case class ModelExposeException(model: OpmProxy) extends RuntimeException
 
-  private [opm] val introspectionMode = {
-    val t = new ThreadLocal[Boolean]
-    t.set(false)
-    t
+  private[opm] val introspectionMode = new ThreadLocal[Boolean] {
+    override def initialValue() = false
   }
 
   private [opm] val introspectionScratch = new ThreadLocal[mutable.Stack[Scratch]]
