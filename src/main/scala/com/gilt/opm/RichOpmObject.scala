@@ -48,7 +48,7 @@ case class RichOpmObject[T <: OpmObject : Manifest](obj: T, factory: OpmFactory)
     def wrap(scratch: Scratch, value: Any): Any = {
       // we may need to wrap this value in Some if the method return
       // type says to. Unfortunately containers are a pain with type erasure
-      if (!value.asInstanceOf[AnyRef].getClass.isAssignableFrom(classOf[Some[_]]) &&
+      if (value != None && !value.asInstanceOf[AnyRef].getClass.isAssignableFrom(classOf[Some[_]]) &&
         scratch.model.fieldMethod(scratch.field).getReturnType.isAssignableFrom(classOf[Option[_]])) {
         Option(value)
       } else {

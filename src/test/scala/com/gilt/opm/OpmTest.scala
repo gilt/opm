@@ -188,4 +188,12 @@ class OpmTest extends FunSuite with ShouldMatchers with OpmFactory {
       instance[MixOfOptionalNonOptional]("", Map("value" -> Some("skibum") ))
     } should produce[IllegalArgumentException]
   }
+
+  test("nested option"){
+    val foo = instance[Foo]("fake").set(_.bar).to(None)
+    assert(foo.bar === None)
+    val foo2 = instance[Foo]("fake").set(_.bar).to(Option(null))
+    assert(foo2.bar === None)
+  }
+
 }
