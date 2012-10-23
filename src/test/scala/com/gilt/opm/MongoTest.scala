@@ -17,6 +17,10 @@ object MongoTest {
     def createdAt: Date
     def tags: Seq[String]
   }
+
+  trait SimpleDomain extends OpmObject {
+    def name: String
+  }
 }
 
 class MongoTest extends FunSuite with OpmMongoStorage {
@@ -64,5 +68,24 @@ class MongoTest extends FunSuite with OpmMongoStorage {
     for (i <- 6 to 1 by -1) {
       assert(obj3.timeline.drop(6 - i).head.id === i)
     }
+  }
+
+  test("overwrite succeeds") {
+    import MongoTest.SimpleDomain
+    val d1 =
+      OpmFactory.instance[SimpleDomain]("sd1").
+        set(_.name).to("d1").
+        prune
+
+    val d2 =
+      OpmFactory.instance[SimpleDomain]("sd1").
+        set(_.name).to("d2").
+        prune
+
+    put(d1)
+    put(d2)
+
+    val d3 = get[SimpleDomain]("sd1")
+    assert(d3.map(_.name) === Some("d2"))
   }
 }

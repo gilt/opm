@@ -119,7 +119,7 @@ trait OpmMongoStorage extends OpmStorage {
     if (collection.findOne(MongoDBObject(Key -> model.key)).isEmpty) {
       create(model)
     } else {
-      update(model)
+      update[V](model)
     }
   }
 
@@ -135,19 +135,32 @@ trait OpmMongoStorage extends OpmStorage {
 
   // updates the database with the latest changes to the object.  Assumes an object with this key has already
   // been passed to the create method.
-  private [this] def update(model: OpmProxy)(implicit mf: Manifest[OpmObject]) {
-    // This is hard. I have a picture that might help explain this, but expect to invest some time
-    // forming the mental model if you really want to understand this.
+  private [this] def update[T <: OpmObject](model: OpmProxy)(implicit mf: Manifest[T]) {
+    // Two cases to consider: the client user may have loaded an object and then added to it,
+    // in which case we need to stitch. Or, he may have created a new object with this key,
+    // and we need to completely replace the old timeline with this timeline. The only way to
+    // be sure is to load what's in the database and try to find where the histories converge.
+    val oldModel = get[T](model.key)
+    require(oldModel.isDefined, "Tried to update %s; not already in the database".format(model))
+    val firstTimestamp = oldModel.get.opmTimestamp
     val curStream = model #:: model.history
-    val mongoStream = collection.find(MongoDBObject(Key -> model.key)).sort(sortFields).toStream.map(wrapDBObj(_))
-    val lastFrame  = mongoStream.take(wavelength)
-    require(!lastFrame.isEmpty, "No mongo records found for key %s; did you create first?".format(model.key))
-    val oldPhase = (wavelength + lastFrame.takeWhile(_.as[String](Type) == DiffType).size) % wavelength
-    val updateSize = curStream.takeWhile(_.timestamp > lastFrame.head.as[Long](Timestamp)).size
-    val startPhase = (wavelength - (updateSize % wavelength) + oldPhase) % wavelength
-    val initialDiffCount = (wavelength - startPhase) % wavelength
-    writeDiffs(model.key, curStream.zip(curStream.tail).take(initialDiffCount))
-    writeWavelets(model.key, curStream.drop(initialDiffCount).take(updateSize - initialDiffCount))
+    val alreadyWritten = curStream.dropWhile(_.timestamp > firstTimestamp)
+    if (!alreadyWritten.isEmpty && alreadyWritten.head.timestamp == firstTimestamp) {  // we need to stitch
+      // This is hard. I have a picture that might help explain this, but expect to invest some time
+      // forming the mental model if you really want to understand this.
+      val mongoStream = collection.find(MongoDBObject(Key -> model.key)).sort(sortFields).toStream.map(wrapDBObj(_))
+      val lastFrame  = mongoStream.take(wavelength)
+      require(!lastFrame.isEmpty, "No mongo records found for key %s; did you create first?".format(model.key))
+      val oldPhase = (wavelength + lastFrame.takeWhile(_.as[String](Type) == DiffType).size) % wavelength
+      val updateSize = curStream.takeWhile(_.timestamp > lastFrame.head.as[Long](Timestamp)).size
+      val startPhase = (wavelength - (updateSize % wavelength) + oldPhase) % wavelength
+      val initialDiffCount = (wavelength - startPhase) % wavelength
+      writeDiffs(model.key, curStream.zip(curStream.tail).take(initialDiffCount))
+      writeWavelets(model.key, curStream.drop(initialDiffCount).take(updateSize - initialDiffCount))
+    } else {  // we're rewriting history ... hope that's what you wanted
+      remove(model.key)
+      create(model)
+    }
   }
 
   // when we retrieve by a key, we always load back to the first value frame.  So that may mean

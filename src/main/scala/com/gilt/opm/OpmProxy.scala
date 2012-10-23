@@ -3,12 +3,6 @@ package com.gilt.opm
 import collection.mutable
 import java.lang.reflect.Method
 
-private [opm] object OpmProxy {
-  def apply(history: Stream[OpmProxy]): OpmProxy = {
-    OpmProxy(history.head.key, history.head.fields, history)
-  }
-}
-
 private [opm] case class OpmProxy(key: String, fields: Map[String, Any], history: Stream[OpmProxy] = Nil.toStream) {
 
   import OpmIntrospection._
