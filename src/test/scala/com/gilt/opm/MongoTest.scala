@@ -110,6 +110,50 @@ class MongoTest extends FunSuite with OpmMongoStorage {
     assert(d4.tags != d1.tags)
     assert(d4.tags == Seq("tag1", "tag2"))
     assert(d4.tags == d3.tags)
+  }
 
+  // Testing this here because it requires an implementation of get and put
+  test("squashPut succeeds") {
+    val obj1 = instance[TestDomain]("td_squash").
+      set(_.id).to(1).
+      set(_.name).to("name1")
+    put(obj1)
+
+    // Straight put, without a prune
+    val obj2 = toSetter(get[TestDomain]("td_squash").get)
+    assert(obj2.timeline.size == 3)
+    // One step back, both are set
+    assert(obj2.timeline.head.id == 1)
+    assert(obj2.timeline.head.name == "name1")
+    // Two steps back, only id is set
+    assert(obj2.timeline.tail.head.id == 1)
+    assertOpmObjectAccessorFails(() => obj2.timeline.tail.head.name)
+    // Three steps back, nothing is set
+    assertOpmObjectAccessorFails(() => obj2.timeline.tail.tail.head.id)
+    assertOpmObjectAccessorFails(() => obj2.timeline.tail.tail.head.name)
+
+    val obj3 = instance[TestDomain]("td_squash").
+      set(_.id).to(2).
+      set(_.name).to("name2")
+    squashPut(obj3)
+
+    // With a squashed put
+    val obj4 = toSetter(get[TestDomain]("td_squash").get)
+    assert(obj4.timeline.size == 4)
+    // One step back, both are set in the same diff
+    assert(obj4.timeline.head.id == 2)
+    // Two steps back, it meets the previous timeline
+    assert(obj4.timeline.head.name == "name2")
+    assert(obj4.timeline.tail == obj2.timeline)
+  }
+
+  def assertOpmObjectAccessorFails(f: () => Any) {
+    try {
+      assert(f() == null)
+      assert(false)
+    } catch {
+      case e: NoSuchElementException => assert(true)
+      case _ => assert(false)
+    }
   }
 }
