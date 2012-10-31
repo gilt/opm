@@ -88,4 +88,28 @@ class MongoTest extends FunSuite with OpmMongoStorage {
     val d3 = get[SimpleDomain]("sd1")
     assert(d3.map(_.name) === Some("d2"))
   }
+
+  test("default to/from MongoMapper works for lists") {
+    val d1 =
+      OpmFactory.instance[TestDomain]("td1").
+        set(_.name).to("name1").
+        set(_.tags).to(Seq("tag1"))
+    put(d1)
+
+    val d2 = get[TestDomain]("td1").get
+    assert(d1.tags == Seq("tag1"))
+    assert(d2.tags == d1.tags)
+
+    val d3 =
+      OpmFactory.instance[TestDomain]("td1").
+        set(_.name).to("name1").
+        set(_.tags).to(Seq("tag1", "tag2"))
+    put(d3)
+
+    val d4 = get[TestDomain]("td1").get
+    assert(d4.tags != d1.tags)
+    assert(d4.tags == Seq("tag1", "tag2"))
+    assert(d4.tags == d3.tags)
+
+  }
 }

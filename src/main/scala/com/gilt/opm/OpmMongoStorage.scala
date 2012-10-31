@@ -3,9 +3,10 @@ package com.gilt.opm
 import com.mongodb.casbah._
 import com.mongodb.casbah.Implicits._
 import com.mongodb.casbah.commons.Implicits.wrapDBObj
-import com.mongodb.casbah.commons.MongoDBObject
+import commons.{MongoDBList, MongoDBObject}
 import com.mongodb.DBObject
 import java.util.{UUID, Date}
+import org.bson.types.BasicBSONList
 
 /**
  * Mixing to provide mongo storage for OpmObjects.
@@ -43,6 +44,11 @@ trait OpmMongoStorage extends OpmStorage {
     case (f, _, u) if u.isInstanceOf[UUID] => u
     case (f, _, n) if n == None => None
     case (f, optFieldClass, some) if some.isInstanceOf[Some[_]] => Some(mapToMongo(f, optFieldClass, some.asInstanceOf[Option[AnyRef]].get))
+    case (f, optFieldClass, iter) if iter.isInstanceOf[Iterable[_]] => {
+      val b = MongoDBList.newBuilder
+      iter.asInstanceOf[Iterable[_]].foreach(item => b += mapToMongo(f, optFieldClass, item))
+      b.result()
+    }
     case (f, _, o) if o.isInstanceOf[OpmObject] =>
       val proxy = OpmFactory.recoverModel(o.asInstanceOf[OpmObject])
       val builder = MongoDBObject.newBuilder
@@ -64,6 +70,9 @@ trait OpmMongoStorage extends OpmStorage {
     case (_, _, n) if n == None => None
     case (field, fieldClassOpt, some) if some.isInstanceOf[Some[_]] =>
       mapFromMongo(field, fieldClassOpt, some.asInstanceOf[Some[_]].get).asInstanceOf[AnyRef]
+    case (field, fieldClassOpt, iter) if iter.isInstanceOf[BasicBSONList] =>
+      val list = iter.asInstanceOf[BasicBSONList]
+      Iterable[AnyRef]() ++ list.toArray.map(item => mapFromMongo(field, fieldClassOpt, item).asInstanceOf[AnyRef])
     case (field, fieldClassOpt, o) if o.isInstanceOf[DBObject] && o.asInstanceOf[DBObject].get("_nested_opm_") == true =>
       val mongoDbObject = wrapDBObj(o.asInstanceOf[DBObject])
       val className = mongoDbObject.as[String](Classname)
@@ -311,14 +320,14 @@ trait OpmMongoStorage extends OpmStorage {
     forwardDiffBuilder += (TimestampField -> later.timestamp)
     builder += Forward -> forwardDiffs.foldLeft(forwardDiffBuilder) {
       case (b, Diff(field, newValueType)) =>
-        b += field -> mapToMongo(field, Some(later.fieldMethod(field).getReturnType), newValueType)
+        b += field -> newValueType.map(mapToMongo(field, Some(later.fieldMethod(field).getReturnType), _))
         b
     }.result()
     val reverseDiffBuilder = MongoDBObject.newBuilder
     reverseDiffBuilder += (TimestampField -> earlier.timestamp)
     builder += Reverse -> reverseDiffs.foldLeft(reverseDiffBuilder) {
       case (b, Diff(field, newValueType)) =>
-        b += field -> mapToMongo(field, Some(later.fieldMethod(field).getReturnType), newValueType)
+        b += field -> newValueType.map(mapToMongo(field, Some(later.fieldMethod(field).getReturnType), _))
         b
     }.result()
     collection += builder.result()
