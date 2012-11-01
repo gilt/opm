@@ -7,6 +7,7 @@ import commons.{MongoDBList, MongoDBObject}
 import com.mongodb.DBObject
 import java.util.{UUID, Date}
 import org.bson.types.BasicBSONList
+import query.{OpmSearcherHelper, OpmSearcher, OpmPropertyEquals, OpmPropertyQuery}
 
 /**
  * Mixing to provide mongo storage for OpmObjects.
@@ -23,16 +24,13 @@ import org.bson.types.BasicBSONList
  * @since 8/22/12 12:18 PM
  */
 
-trait OpmMongoStorage extends OpmStorage {
+trait OpmMongoStorage[V <: OpmObject] extends OpmStorage[V] {
 
   import OpmFactory._
   import OpmIntrospection.{TimestampField, ClassField, MetaFields}
   import OpmMongoStorage._
 
   def collection: MongoCollection
-
-  // if you want automatic storage of nested object, override this
-  def nestedToStorage(clazz: Class[_]): Option[OpmStorage] = Some(this)
 
   def wavelength: Int = 5           // value frame + (wavelength - 1) diff frames
   def toMongoMapper: Option[PartialFunction[(String, Option[Class[_]], AnyRef), AnyRef]] = None
@@ -56,7 +54,7 @@ trait OpmMongoStorage extends OpmStorage {
       builder += Classname -> proxy.clazz.getName
       builder += Timestamp -> proxy.timestamp
       builder += Key -> proxy.key
-      nestedToStorage(proxy.clazz).foreach{
+      nestedToStorage(Option(o.asInstanceOf[OpmObject]))(Manifest.classType(Class.forName(proxy.clazz.getName))).foreach {
         storage =>
           storage.maybePut(o.asInstanceOf[OpmObject])(Manifest.classType(Class.forName(proxy.clazz.getName)))
       }
@@ -79,15 +77,15 @@ trait OpmMongoStorage extends OpmStorage {
       val timestamp = mongoDbObject.as[Long](Timestamp)
       val key = mongoDbObject.as[String](Key)
       val clazz = Class.forName(className)
-      val loadedOpt: Option[OpmObject] = nestedToStorage(clazz).map {
-        storage =>
+      val loadedOpt = nestedToStorage(None)(Manifest.classType(clazz)).map {
+        storage: OpmStorage[_] =>
           storage.get(key)(Manifest.classType(clazz))
       }.getOrElse {
         sys.error("Could not find an OpmStorage instance for class %s".format(clazz))
       }
       loadedOpt.map {
         opm =>
-          opm.timeline.find(_.opmTimestamp == timestamp).getOrElse {
+          opm.asInstanceOf[OpmObject].timeline.find(_.opmTimestamp == timestamp).getOrElse {
               sys.error("Could not load an object(%s, %s) with opmTimestamp %s".format(className, key, timestamp))
           }
       }.getOrElse {
@@ -123,12 +121,12 @@ trait OpmMongoStorage extends OpmStorage {
 
   private [this] val sortFields = MongoDBObject(Timestamp -> -1, Type -> 1)
 
-  override def put[V <: OpmObject](obj: V)(implicit mf: Manifest[V]) {
+  override def put(obj: V)(implicit mf: Manifest[V]) {
     val model: OpmProxy = recoverModel(obj)
     if (collection.findOne(MongoDBObject(Key -> model.key)).isEmpty) {
       create(model)
     } else {
-      update[V](model)
+      update(model)
     }
   }
 
@@ -144,12 +142,12 @@ trait OpmMongoStorage extends OpmStorage {
 
   // updates the database with the latest changes to the object.  Assumes an object with this key has already
   // been passed to the create method.
-  private [this] def update[T <: OpmObject](model: OpmProxy)(implicit mf: Manifest[T]) {
+  private [this] def update(model: OpmProxy)(implicit mf: Manifest[V]) {
     // Two cases to consider: the client user may have loaded an object and then added to it,
     // in which case we need to stitch. Or, he may have created a new object with this key,
     // and we need to completely replace the old timeline with this timeline. The only way to
     // be sure is to load what's in the database and try to find where the histories converge.
-    val oldModel = get[T](model.key)
+    val oldModel = get(model.key)
     require(oldModel.isDefined, "Tried to update %s; not already in the database".format(model))
     val firstTimestamp = oldModel.get.opmTimestamp
     val curStream = model #:: model.history
@@ -181,7 +179,7 @@ trait OpmMongoStorage extends OpmStorage {
   // it can find and load the next wavelet. This strikes me as "complicated", and is an advanced
   // use of scala streams (?), and also has some memory risk.  We could obviate that possibly by
   // keeping softkeys and a mechanism to load on demand, but I guess we'll see.
-  override def get[V <: OpmObject](key: String)(implicit mf: Manifest[V]): Option[V] = {
+  override def get(key: String)(implicit mf: Manifest[V]): Option[V] = {
     val mongoStream = collection.find(MongoDBObject(Key -> key)).sort(sortFields).map(wrapDBObj(_)).toStream
     val initialDiffs = mongoStream.takeWhile(_.as[String](Type) == DiffType)
     mongoStream.dropWhile(_.as[String](Type) == DiffType).headOption.flatMap {
@@ -223,6 +221,38 @@ trait OpmMongoStorage extends OpmStorage {
     }
   }
 
+  /**
+   * Kicks off a search process. The fully-chained search looks like this: search(_.propertyName).equals("value")
+   *
+   * @see OpmSearcher
+   * @param v: A 'method' that indicates which property should be searched against.
+   * @tparam T: The class of the property being searched. In practice this will be inferred from the property given.
+   * @return: The list of objects that match the query.
+   */
+  def search[T](v: V => T)(implicit mf: Manifest[V]): OpmSearcherHelper[V, T] = {
+    OpmSearcher[V](query => finishSearch(query)).search(v)
+  }
+
+  /**
+   * Completes the search process with the query collected by OpmSearcher.
+   *
+   * @param query: The requested query, as determined by the chained search call.
+   * @param mf
+   * @return: A result object that can be further chained for more-detailed searches.
+   */
+  private def finishSearch(query: OpmPropertyQuery)(implicit mf: Manifest[V]): OpmQueryResult[V] = {
+    // The mongoStream simply pulls the keys of records for which the property matches the given value in either a
+    // value or diff record. This may include records that no longer match the query, so the stream is again filtered
+    // by the same query once the OPM objects are constructed [the .find(query) below].
+    val mongoStream = collection.distinct(Key,
+      MongoDBObject("$or" -> MongoDBList(
+        query.toMongoDBObject("%s.".format(Instance)),
+        query.toMongoDBObject("%s.".format(Forward))
+      ))).
+      toStream.
+      flatMap((key: Any) => get(key.toString))
+    OpmQueryResult[V](mongoStream).search(query)
+  }
 
   // deletes all records with the given key, doing nothing if the key doesn't exist.
   override def remove(key: String) {

@@ -28,10 +28,10 @@ object MongoTestWithCustomMappers {
   case class Month(month: Int, year: Int)
 }
 
-class MongoTestWithCustomMappers extends FunSuite with OpmMongoStorage {
+class MongoTestWithCustomMappers extends FunSuite with OpmMongoStorage[MongoTestWithCustomMappers.TestDomain] {
   import MongoTestWithCustomMappers._
   import OpmFactory._
-  val collection = MongoConnection()("opm-MongoTest")("opm")
+  val collection = MongoConnection()("opm-MongoTest")("opm_custom_mappers")
   collection.drop()
 
   override def toMongoMapper: Option[PartialFunction[(String, Option[Class[_]], AnyRef), AnyRef]] = {
@@ -74,14 +74,14 @@ class MongoTestWithCustomMappers extends FunSuite with OpmMongoStorage {
     val d1 = OpmFactory.instance[TestDomain]("mongo_test_with_custom_mappers1").set(_.tags).to(Seq("tag1"))
     put(d1)
 
-    val d2 = get[TestDomain]("mongo_test_with_custom_mappers1").get
+    val d2 = get("mongo_test_with_custom_mappers1").get
     assert(d1.tags == Seq("tag1"))
     assert(d2.tags == d1.tags)
 
     val d3 = OpmFactory.instance[TestDomain]("mongo_test_with_custom_mappers1").set(_.tags).to(Seq("tag1", "tag2"))
     put(d3)
 
-    val d4 = get[TestDomain]("mongo_test_with_custom_mappers1").get
+    val d4 = get("mongo_test_with_custom_mappers1").get
     assert(d4.tags != d1.tags)
     assert(d4.tags == Seq("tag1", "tag2"))
     assert(d4.tags == d3.tags)
@@ -92,7 +92,7 @@ class MongoTestWithCustomMappers extends FunSuite with OpmMongoStorage {
     val d1 = OpmFactory.instance[TestDomain]("mongo_test_with_custom_mappers2").set(_.createdAt).to(now).set(_.updatedAt).to(None)
     put(d1)
 
-    val d2 = get[TestDomain]("mongo_test_with_custom_mappers2").get
+    val d2 = get("mongo_test_with_custom_mappers2").get
     assert(d1.createdAt == now)
     assert(d2.createdAt == d1.createdAt)
     assert(d2.updatedAt == None)
@@ -102,7 +102,7 @@ class MongoTestWithCustomMappers extends FunSuite with OpmMongoStorage {
     val d3 = OpmFactory.instance[TestDomain]("mongo_test_with_custom_mappers2").set(_.createdAt).to(tomorrow).set(_.updatedAt).to(Option(tomorrow))
     put(d3)
 
-    val d4 = get[TestDomain]("mongo_test_with_custom_mappers2").get
+    val d4 = get("mongo_test_with_custom_mappers2").get
     assert(d4.createdAt != d1.createdAt)
     assert(d4.updatedAt != d1.updatedAt)
     assert(d4.createdAt == tomorrow)
@@ -115,7 +115,7 @@ class MongoTestWithCustomMappers extends FunSuite with OpmMongoStorage {
     val d1 = OpmFactory.instance[TestDomain]("mongo_test_with_custom_mappers3").set(_.startMonth).to(Month(1, 2012)).set(_.endMonth).to(None)
     put(d1)
 
-    val d2 = get[TestDomain]("mongo_test_with_custom_mappers3").get
+    val d2 = get("mongo_test_with_custom_mappers3").get
     assert(d1.startMonth == Month(1, 2012))
     assert(d2.startMonth == d1.startMonth)
     assert(d2.endMonth == None)
@@ -124,7 +124,7 @@ class MongoTestWithCustomMappers extends FunSuite with OpmMongoStorage {
     val d3 = OpmFactory.instance[TestDomain]("mongo_test_with_custom_mappers3").set(_.startMonth).to(Month(2, 2012)).set(_.endMonth).to(Option(Month(3, 2012)))
     put(d3)
 
-    val d4 = get[TestDomain]("mongo_test_with_custom_mappers3").get
+    val d4 = get("mongo_test_with_custom_mappers3").get
     assert(d4.startMonth != d1.startMonth)
     assert(d4.endMonth != d1.endMonth)
     assert(d4.startMonth == Month(2, 2012))

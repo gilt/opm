@@ -42,13 +42,25 @@ object NestedMongoTest {
   case class CImpl(name: String, d: D) extends C
 
   case class DImpl(name: String) extends D
+
+  MongoConnection()("opm-MongoTest")("nested-opm-opb").drop()
+  MongoConnection()("opm-MongoTest")("nested-opm-opc").drop()
+  MongoConnection()("opm-MongoTest")("nested-opm-opd").drop()
 }
 
-class NestedOpmMongoTest extends FunSuite with OpmMongoStorage {
+class NestedOpmMongoTest extends FunSuite with OpmMongoStorage[NestedMongoTest.OpmA] {
   import NestedMongoTest._
   import OpmFactory._
   val collection = MongoConnection()("opm-MongoTest")("nested-opm")
   collection.drop()
+
+  private def getStorage[T <: OpmObject](obj: Option[T])(implicit mf: Manifest[T]): Option[OpmMongoStorage[T]] = {
+    Option(new OpmMongoStorage[T] {
+      val collection = MongoConnection()("opm-MongoTest")("nested-opm-%s".format(mf.erasure.getSimpleName.toLowerCase))
+      override def nestedToStorage[U <: OpmObject](obj: Option[U])(implicit mf: Manifest[U]) = getStorage(obj)
+    })
+  }
+  override def nestedToStorage[T <: OpmObject](obj: Option[T] = None)(implicit mf: Manifest[T]) = getStorage(obj)
 
   test("OpmObject nesting") {
     val d = instance[OpmD]("d").set(_.name).to("hello, D")
@@ -57,7 +69,7 @@ class NestedOpmMongoTest extends FunSuite with OpmMongoStorage {
     val a = instance[OpmA]("a").set(_.id).to(3).set(_.b).to(Some(b))
     put(a)
 
-    val loadedA = get[OpmA](a.opmKey)
+    val loadedA = get(a.opmKey)
     assert(loadedA.get === a)
     assert(loadedA.get.b.get === b)
     assert(loadedA.get.b.get.c.get === c)
@@ -65,7 +77,7 @@ class NestedOpmMongoTest extends FunSuite with OpmMongoStorage {
   }
 }
 
-class NestedNonMongoTest extends FunSuite with OpmMongoStorage {
+class NestedNonMongoTest extends FunSuite with OpmMongoStorage[NestedMongoTest.OpmA] {
   import NestedMongoTest._
   import OpmFactory._
   import com.mongodb.casbah._
@@ -92,7 +104,7 @@ class NestedNonMongoTest extends FunSuite with OpmMongoStorage {
         val m = wrapDBObj(maybeB._3.asInstanceOf[DBObject])
           BImpl(
             name = m.as[String]("name"),
-            {
+            c = {
               val c = m.getAs[BasicDBObject]("c")
               c.map {
                 cObj => CImpl(name = cObj.get("name").toString, d = {
@@ -107,13 +119,13 @@ class NestedNonMongoTest extends FunSuite with OpmMongoStorage {
 
   test("non-OpmObject nesting") {
     val d = DImpl(name = "Hi, I'm a D.")
-    val c = CImpl(name = "Hi, I'm a C.", d)
+    val c = CImpl(name = "Hi, I'm a C.", d = d)
     val b = BImpl(name = "Hi, I'm a B.", c = Some(c))
     val a = instance[OpmA]("a").set(_.id).to(3).set(_.b).to(Some(b))
 
     put(a)
 
-    val loadedA = get[OpmA](a.opmKey)
+    val loadedA = get(a.opmKey)
     assert(loadedA.get === a)
     assert(loadedA.get.b.get === b)
     assert(loadedA.get.b.get.c.get === c)
