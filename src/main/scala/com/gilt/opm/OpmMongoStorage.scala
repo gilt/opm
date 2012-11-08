@@ -7,7 +7,8 @@ import commons.{MongoDBList, MongoDBObject}
 import com.mongodb.DBObject
 import java.util.{UUID, Date}
 import org.bson.types.BasicBSONList
-import query.{OpmSearcherHelper, OpmSearcher, OpmPropertyEquals, OpmPropertyQuery}
+import com.giltgroupe.util.{Timestamp => TimestampClass}
+import query.{OpmSearcherHelper, OpmPropertyGreaterThanOrEqual, OpmPropertyLessThanOrEqual, OpmPropertyQuery, OpmSearcher}
 
 /**
  * Mixing to provide mongo storage for OpmObjects.
@@ -219,6 +220,55 @@ trait OpmMongoStorage[V <: OpmObject] extends OpmStorage[V] {
 
         assembleFinalObjects(initialObjs.toStream #::: loadStream(key, lastValue, mongoStream.drop(initialObjs.size))).headOption
     }
+  }
+
+  /**
+   * Use this to pull a list of object keys that have been updated within the given time period.
+   *
+   * @param start: The timestamp to start at. If None, it will start at the beginning of time.
+   * @param end: The timestamp to end at. If None, it will not cut off at any date.
+   * @return: A Stream of key Strings that have been updated within the requested date range.
+   */
+  def getUpdatedKeys(start: Option[Long] = None, end: Option[Long] = None): Stream[String] = {
+    val builder = MongoDBList.newBuilder
+    start.foreach{
+      t => builder += MongoDBObject("$or" -> MongoDBList(
+        MongoDBObject("$and" -> MongoDBList(
+          MongoDBObject(Type -> DiffType),
+          OpmPropertyGreaterThanOrEqual(ForwardTimestamp, t).toMongoDBObject()
+        )),
+        MongoDBObject("$and" -> MongoDBList(
+          MongoDBObject(Type -> ValueType),
+          OpmPropertyGreaterThanOrEqual(Timestamp, t).toMongoDBObject()
+        ))
+      ))
+    }
+    end.foreach{
+      t => builder += MongoDBObject("$or" -> MongoDBList(
+        MongoDBObject("$and" -> MongoDBList(
+          MongoDBObject(Type -> DiffType),
+          OpmPropertyLessThanOrEqual(ForwardTimestamp, t).toMongoDBObject()
+        )),
+        MongoDBObject("$and" -> MongoDBList(
+          MongoDBObject(Type -> ValueType),
+          OpmPropertyLessThanOrEqual(Timestamp, t).toMongoDBObject()
+        ))
+      ))
+    }
+    val query = builder.result()
+    collection.distinct(Key, query.size match {
+      case 0 => null
+      case 1 => query.head.asInstanceOf[DBObject]
+      case _ => MongoDBObject("$and" -> query)
+    }).
+      toStream.
+      map(_.toString)
+  }
+  def getUpdatedKeys(start: TimestampClass, end: TimestampClass): Stream[String] = {
+    getUpdatedKeys(Option(start.getTime * 1000000), Option(end.getTime * 1000000))
+  }
+  def getUpdatedKeys(start: TimestampClass): Stream[String] = {
+    getUpdatedKeys(Option(start.getTime * 1000000))
   }
 
   /**

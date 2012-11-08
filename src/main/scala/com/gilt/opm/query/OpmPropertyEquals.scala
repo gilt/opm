@@ -1,6 +1,7 @@
 package com.gilt.opm.query
 
 import com.mongodb.casbah.commons.MongoDBObject
+import com.giltgroupe.service.commons.mongo.MongoHelper.toMongo
 
 /**
  * Case class representing the logic to filter a property that is equal to the given value.
@@ -10,5 +11,5 @@ import com.mongodb.casbah.commons.MongoDBObject
  */
 case class OpmPropertyEquals(property: String, value: Any) extends OpmPropertyQuery {
   override def isMatch(obj: Any) = obj == value
-  override def toMongoDBObject(prefix: String = "") = MongoDBObject("%s%s".format(prefix, property) -> value)
+  override def toMongoDBObject(prefix: String = "") = MongoDBObject("%s%s".format(prefix, property) -> toMongo(value))
 }

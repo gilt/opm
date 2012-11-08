@@ -3,6 +3,7 @@ package com.gilt.opm
 import org.scalatest.FunSuite
 import com.mongodb.casbah.MongoConnection
 import java.util.{UUID, Date}
+import com.giltgroupe.util.Timestamp
 
 /**
  * Document Me.
@@ -116,6 +117,51 @@ class MongoTest extends FunSuite with OpmMongoStorage[MongoTest.TestDomain] {
     assert(d4.tags != d1.tags)
     assert(d4.tags == Seq("tag1", "tag2"))
     assert(d4.tags == d3.tags)
+  }
+
+  test("getUpdatedKeys finds all when no range is given") {
+    val objects = setupForGetUpdatedKeys()
+    val result = getUpdatedKeys()
+    objects.foreach {
+      obj => assert(result.exists(_ == obj.opmKey))
+    }
+  }
+
+  test("getUpdatedKeys finds within range") {
+    val objects = setupForGetUpdatedKeys()
+    val result = getUpdatedKeys(Option(objects.head.opmTimestamp + 1), Option(objects.last.opmTimestamp - 1))
+    assert(!result.exists(_ == objects.head.opmKey))
+    assert(result.exists(_ == objects.tail.head.opmKey))
+    assert(!result.exists(_ == objects.last.opmKey))
+  }
+
+  test("getUpdatedKeys finds with lower bound") {
+    val objects = setupForGetUpdatedKeys()
+    val result = getUpdatedKeys(Option(objects.head.opmTimestamp + 1))
+    assert(!result.exists(_ == objects.head.opmKey))
+    assert(result.exists(_ == objects.tail.head.opmKey))
+    assert(result.exists(_ == objects.last.opmKey))
+  }
+
+  test("getUpdatedKeys finds with upper bound") {
+    val objects = setupForGetUpdatedKeys()
+    val result = getUpdatedKeys(None, Option(objects.last.opmTimestamp - 1))
+    assert(result.exists(_ == objects.head.opmKey))
+    assert(result.exists(_ == objects.tail.head.opmKey))
+    assert(!result.exists(_ == objects.last.opmKey))
+  }
+
+  test("getUpdatedKeys finds updated keys within range") {
+    val objects = setupForGetUpdatedKeys()
+    val d1 =
+      OpmFactory.instance[TestDomain](objects.head.opmKey).
+        set(_.name).to("updated_name")
+    squashPut(d1)
+    val result = getUpdatedKeys(Option(objects.last.opmTimestamp + 1))
+    assert(result.exists(_ == objects.head.opmKey))
+    objects.tail.foreach {
+      obj => assert(!result.exists(_ == obj.opmKey))
+    }
   }
 
   test("search by equals for single property") {
@@ -621,6 +667,16 @@ class MongoTest extends FunSuite with OpmMongoStorage[MongoTest.TestDomain] {
 
   def opmObjectMatches(obj1: OpmObject, obj2: OpmObject): Boolean = {
     obj1.opmKey == obj2.opmKey
+  }
+
+  def setupForGetUpdatedKeys() = {
+    1 to 3 map {
+      i =>
+        val obj = OpmFactory.instance[TestDomain](uniqueKey).
+          set(_.name).to("name" + i)
+        put(obj)
+        obj
+    }
   }
 
   def uniqueKey = UUID.randomUUID().toString
