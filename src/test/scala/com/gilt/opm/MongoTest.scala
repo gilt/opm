@@ -129,7 +129,7 @@ class MongoTest extends FunSuite with OpmMongoStorage[MongoTest.TestDomain] {
 
   test("getUpdatedKeys finds within range") {
     val objects = setupForGetUpdatedKeys()
-    val result = getUpdatedKeys(Option(objects.head.opmTimestamp + 1), Option(objects.last.opmTimestamp - 1))
+    val result = getUpdatedKeys(Option(objects.head.opmTimestamp + 1), Option(objects.tail.head.opmTimestamp + 1))
     assert(!result.exists(_ == objects.head.opmKey))
     assert(result.exists(_ == objects.tail.head.opmKey))
     assert(!result.exists(_ == objects.last.opmKey))
@@ -145,7 +145,7 @@ class MongoTest extends FunSuite with OpmMongoStorage[MongoTest.TestDomain] {
 
   test("getUpdatedKeys finds with upper bound") {
     val objects = setupForGetUpdatedKeys()
-    val result = getUpdatedKeys(None, Option(objects.last.opmTimestamp - 1))
+    val result = getUpdatedKeys(None, Option(objects.tail.head.opmTimestamp + 1))
     assert(result.exists(_ == objects.head.opmKey))
     assert(result.exists(_ == objects.tail.head.opmKey))
     assert(!result.exists(_ == objects.last.opmKey))
@@ -672,10 +672,12 @@ class MongoTest extends FunSuite with OpmMongoStorage[MongoTest.TestDomain] {
   def setupForGetUpdatedKeys() = {
     1 to 3 map {
       i =>
-        val obj = OpmFactory.instance[TestDomain](uniqueKey).
+        val key = uniqueKey
+        put(OpmFactory.instance[TestDomain](key).
           set(_.name).to("name" + i)
-        put(obj)
-        obj
+        )
+        1 to 10 foreach (i => squashPut(get(key).get.set(_.createdAt).to(new Date)))
+        get(key).get
     }
   }
 
