@@ -1,6 +1,7 @@
 package com.giltgroupe.service.commons.mongo
 
 import com.giltgroupe.util.Timestamp
+import com.gilt.opm.NanoTimestamp
 
 /**
  * A library of methods to help with marshalling/unmarshalling objects to/from Mongo.
@@ -11,7 +12,8 @@ import com.giltgroupe.util.Timestamp
 object MongoHelper {
   def toMongo(v: Any): Any = {
     v match {
-      case value: Timestamp => value.getTime
+      case ts: NanoTimestamp => ts.time
+      case ts: Timestamp => (new NanoTimestamp(ts)).time
       case _ => v
     }
   }

@@ -3,7 +3,6 @@ package com.gilt.opm
 import org.scalatest.FunSuite
 import com.mongodb.casbah.MongoConnection
 import java.util.{UUID, Date}
-import com.giltgroupe.util.Timestamp
 
 /**
  * Document Me.
@@ -121,7 +120,7 @@ class MongoTest extends FunSuite with OpmMongoStorage[MongoTest.TestDomain] {
 
   test("getUpdatedKeys finds all when no range is given") {
     val objects = setupForGetUpdatedKeys()
-    val result = getUpdatedKeys()
+    val result = getUpdatedKeys(None, None)
     objects.foreach {
       obj => assert(result.exists(_ == obj.opmKey))
     }
@@ -129,7 +128,7 @@ class MongoTest extends FunSuite with OpmMongoStorage[MongoTest.TestDomain] {
 
   test("getUpdatedKeys finds within range") {
     val objects = setupForGetUpdatedKeys()
-    val result = getUpdatedKeys(Option(objects.head.opmTimestamp + 1), Option(objects.tail.head.opmTimestamp + 1))
+    val result = getUpdatedKeys(Option(NanoTimestamp(objects.head.opmTimestamp + 1)), Option(NanoTimestamp(objects.tail.head.opmTimestamp + 1)))
     assert(!result.exists(_ == objects.head.opmKey))
     assert(result.exists(_ == objects.tail.head.opmKey))
     assert(!result.exists(_ == objects.last.opmKey))
@@ -137,7 +136,7 @@ class MongoTest extends FunSuite with OpmMongoStorage[MongoTest.TestDomain] {
 
   test("getUpdatedKeys finds with lower bound") {
     val objects = setupForGetUpdatedKeys()
-    val result = getUpdatedKeys(Option(objects.head.opmTimestamp + 1))
+    val result = getUpdatedKeys(Option(NanoTimestamp(objects.head.opmTimestamp + 1)), None)
     assert(!result.exists(_ == objects.head.opmKey))
     assert(result.exists(_ == objects.tail.head.opmKey))
     assert(result.exists(_ == objects.last.opmKey))
@@ -145,7 +144,7 @@ class MongoTest extends FunSuite with OpmMongoStorage[MongoTest.TestDomain] {
 
   test("getUpdatedKeys finds with upper bound") {
     val objects = setupForGetUpdatedKeys()
-    val result = getUpdatedKeys(None, Option(objects.tail.head.opmTimestamp + 1))
+    val result = getUpdatedKeys(None, Option(NanoTimestamp(objects.tail.head.opmTimestamp + 1)))
     assert(result.exists(_ == objects.head.opmKey))
     assert(result.exists(_ == objects.tail.head.opmKey))
     assert(!result.exists(_ == objects.last.opmKey))
@@ -157,7 +156,7 @@ class MongoTest extends FunSuite with OpmMongoStorage[MongoTest.TestDomain] {
       OpmFactory.instance[TestDomain](objects.head.opmKey).
         set(_.name).to("updated_name")
     squashPut(d1)
-    val result = getUpdatedKeys(Option(objects.last.opmTimestamp + 1))
+    val result = getUpdatedKeys(Option(NanoTimestamp(objects.last.opmTimestamp + 1)), None)
     assert(result.exists(_ == objects.head.opmKey))
     objects.tail.foreach {
       obj => assert(!result.exists(_ == obj.opmKey))

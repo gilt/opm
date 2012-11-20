@@ -2,6 +2,7 @@ package com.gilt.opm
 
 import java.lang.reflect.{Proxy, Method, InvocationHandler}
 import scala.collection.mutable
+import com.giltgroupe.util.time.MonotonicClock
 
 object OpmIntrospection {
   val ClassField = "__c__"
@@ -121,7 +122,7 @@ trait OpmFactory {
 
 object OpmFactory extends OpmFactory {
 
-  def clock() = System.nanoTime()
+  def clock() = MonotonicClock.currentTimeNanos
 
   private [opm] case class Scratch(model: OpmProxy, field: String, clazz: Class[_])
 
