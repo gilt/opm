@@ -32,11 +32,24 @@ object OpmTest {
     def name: String
     def value: Option[String]
   }
+
+  trait MixOfOptionalNonOptionalWithMethod extends OpmObject {
+    def name: String
+    def value: Option[String]
+
+    override def equals(obj: Any) = obj match {
+      case (o: MixOfOptionalNonOptionalWithMethod) => {
+        (this.name == o.name) &&
+        (this.value == o.value)
+      }
+      case _ => false
+    }
+  }
 }
 
 class OpmTest extends FunSuite with ShouldMatchers with OpmFactory {
 
-  import OpmTest.{Foo, Bar, SubFoo, MixOfOptionalNonOptional}
+  import OpmTest.{Foo, Bar, SubFoo, MixOfOptionalNonOptional, MixOfOptionalNonOptionalWithMethod}
 
   var time = 0l
 
@@ -186,6 +199,14 @@ class OpmTest extends FunSuite with ShouldMatchers with OpmFactory {
     instance[MixOfOptionalNonOptional]("", Map("name" -> "eric", "value" -> Some("skibum") ))
     evaluating {
       instance[MixOfOptionalNonOptional]("", Map("value" -> Some("skibum") ))
+    } should produce[IllegalArgumentException]
+  }
+
+  test("required fields ignores methods") {
+    instance[MixOfOptionalNonOptionalWithMethod]("", Map("name" -> "eric"))
+    instance[MixOfOptionalNonOptionalWithMethod]("", Map("name" -> "eric", "value" -> Some("skibum") ))
+    evaluating {
+      instance[MixOfOptionalNonOptionalWithMethod]("", Map("value" -> Some("skibum") ))
     } should produce[IllegalArgumentException]
   }
 

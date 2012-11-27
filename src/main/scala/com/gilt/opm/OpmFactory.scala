@@ -43,7 +43,7 @@ trait OpmFactory {
 
   // get hold of methods of this object
   private [opm] def fields[T <: OpmObject : Manifest]: Array[Method] =
-    manifest.erasure.getMethods.filterNot(m => opmFieldNames.contains(m.getName))
+    manifest.erasure.getMethods.filterNot(m => opmFieldNames.contains(m.getName) || (m.getParameterTypes.length > 0))
 
   // return an array of fields not set in this map
   private [opm] def missingFields[T <: OpmObject : Manifest](init: Map[String, Any]): Array[String] = {
