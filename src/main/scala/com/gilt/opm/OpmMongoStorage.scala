@@ -70,7 +70,10 @@ trait OpmMongoStorage[V <: OpmObject] extends OpmStorage[V] {
       mapFromMongo(field, fieldClassOpt, some.asInstanceOf[Some[_]].get).asInstanceOf[AnyRef]
     case (field, fieldClassOpt, iter) if iter.isInstanceOf[BasicBSONList] =>
       val list = iter.asInstanceOf[BasicBSONList]
-      Iterable[AnyRef]() ++ list.toArray.map(item => mapFromMongo(field, fieldClassOpt, item).asInstanceOf[AnyRef])
+      Iterable[AnyRef]() ++ list.toArray.map(item => mapFromMongo(field, fieldClassOpt, item).asInstanceOf[AnyRef]) match {
+        case aSet if fieldClassOpt == Some(classOf[Set[_]]) => aSet.toSet
+        case other => other
+      }
     case (field, fieldClassOpt, o) if o.isInstanceOf[DBObject] && o.asInstanceOf[DBObject].get("_nested_opm_") == true =>
       val mongoDbObject = wrapDBObj(o.asInstanceOf[DBObject])
       val className = mongoDbObject.as[String](Classname)
