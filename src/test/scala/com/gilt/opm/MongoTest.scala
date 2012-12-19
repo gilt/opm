@@ -17,6 +17,7 @@ object MongoTest {
     def description: String
     def createdAt: Date
     def tags: Seq[String]
+    def tagSet: Set[String]
   }
 
   trait SimpleDomain extends OpmObject {
@@ -74,6 +75,17 @@ class MongoTest extends FunSuite with OpmMongoStorage[MongoTest.TestDomain] {
     for (i <- 6 to 1 by -1) {
       assert(obj3.timeline.drop(6 - i).head.id === i)
     }
+  }
+
+  test("empty collections") {
+    import MongoTest.SimpleDomain
+    import com.gilt.opm.OpmFactory._
+    val obj = instance[TestDomain]("x")
+      .set(_.tagSet).to(Set.empty[String])
+    put(obj)
+
+    val issue = get("x").get
+    assert(issue.tagSet == Set.empty[String])
   }
 
   test("overwrite succeeds") {
