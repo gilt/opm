@@ -1,6 +1,6 @@
 package com.gilt.opm
 
-import org.scalatest.FunSuite
+import org.scalatest.{BeforeAndAfterAll, FunSuite}
 import com.mongodb.casbah.MongoConnection
 
 /**
@@ -43,24 +43,34 @@ object NestedMongoTest {
 
   case class DImpl(name: String) extends D
 
-  MongoConnection()("opm-MongoTest")("nested-opm-opb").drop()
-  MongoConnection()("opm-MongoTest")("nested-opm-opc").drop()
-  MongoConnection()("opm-MongoTest")("nested-opm-opd").drop()
 }
 
-class NestedOpmMongoTest extends FunSuite with OpmMongoStorage[NestedMongoTest.OpmA] {
+class NestedOpmMongoTest extends FunSuite with OpmMongoStorage[NestedMongoTest.OpmA] with CollectionHelper with BeforeAndAfterAll {
   import NestedMongoTest._
   import OpmFactory._
-  val collection = MongoConnection()("opm-MongoTest")("nested-opm")
-  collection.drop()
+  import CollectionHelper.databaseName
 
-  private def getStorage[T <: OpmObject](obj: Option[T])(implicit mf: Manifest[T]): Option[OpmMongoStorage[T]] = {
+  val collectionName = "nested-opm"
+
+  override def beforeAll() {
+    MongoConnection()(databaseName)("nested-opm-opmb").drop()
+    MongoConnection()(databaseName)("nested-opm-opmb-locks").drop()
+
+    MongoConnection()(databaseName)("nested-opm-opmc").drop()
+    MongoConnection()(databaseName)("nested-opm-opmc-locks").drop()
+
+    MongoConnection()(databaseName)("nested-opm-opmd").drop()
+    MongoConnection()(databaseName)("nested-opm-opmd-locks").drop()
+  }
+
+  private def getStorage[T <: OpmObject](implicit mf: Manifest[T]): Option[OpmMongoStorage[T]] = {
     Option(new OpmMongoStorage[T] {
-      val collection = MongoConnection()("opm-MongoTest")("nested-opm-%s".format(mf.erasure.getSimpleName.toLowerCase))
-      override def nestedToStorage[U <: OpmObject](obj: Option[U])(implicit mf: Manifest[U]) = getStorage(obj)
+      val collection = MongoConnection()(databaseName)("nested-opm-%s".format(mf.erasure.getSimpleName.toLowerCase))
+      val locks = MongoConnection()(databaseName)("nested-opm-%s-locks".format(mf.erasure.getSimpleName.toLowerCase))
+      override def nestedToStorage[U <: OpmObject](obj: Option[U])(implicit mf: Manifest[U]) = getStorage[U]
     })
   }
-  override def nestedToStorage[T <: OpmObject](obj: Option[T] = None)(implicit mf: Manifest[T]) = getStorage(obj)
+  override def nestedToStorage[T <: OpmObject](obj: Option[T] = None)(implicit mf: Manifest[T]) = getStorage[T]
 
   test("OpmObject nesting") {
     val d = instance[OpmD]("d").set(_.name).to("hello, D")
@@ -77,15 +87,15 @@ class NestedOpmMongoTest extends FunSuite with OpmMongoStorage[NestedMongoTest.O
   }
 }
 
-class NestedNonMongoTest extends FunSuite with OpmMongoStorage[NestedMongoTest.OpmA] {
+class NestedNonMongoTest extends FunSuite with OpmMongoStorage[NestedMongoTest.OpmA] with CollectionHelper {
   import NestedMongoTest._
   import OpmFactory._
   import com.mongodb.casbah._
   import com.mongodb.casbah.commons.MongoDBObject
   import com.mongodb.casbah.Implicits._
   import com.mongodb.casbah.commons.Implicits.wrapDBObj
-  val collection = MongoConnection()("opm-MongoTest")("nested-non-opm")
-  collection.drop()
+
+  override val collectionName = "nested-non-opm"
 
   override def toMongoMapper: Option[PartialFunction[(String, Option[Class[_]], AnyRef), AnyRef]] =
     Some {

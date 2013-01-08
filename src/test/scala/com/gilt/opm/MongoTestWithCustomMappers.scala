@@ -28,11 +28,10 @@ object MongoTestWithCustomMappers {
   case class Month(month: Int, year: Int)
 }
 
-class MongoTestWithCustomMappers extends FunSuite with OpmMongoStorage[MongoTestWithCustomMappers.TestDomain] {
+class MongoTestWithCustomMappers extends FunSuite with OpmMongoStorage[MongoTestWithCustomMappers.TestDomain] with CollectionHelper {
   import MongoTestWithCustomMappers._
   import OpmFactory._
-  val collection = MongoConnection()("opm-MongoTest")("opm_custom_mappers")
-  collection.drop()
+  override val collectionName = "opm_custom_mappers"
 
   override def toMongoMapper: Option[PartialFunction[(String, Option[Class[_]], AnyRef), AnyRef]] = {
     Some {

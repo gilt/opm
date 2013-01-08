@@ -5,7 +5,8 @@ import com.mongodb.casbah.Implicits._
 import com.mongodb.casbah.commons.Implicits.wrapDBObj
 import commons.{MongoDBList, MongoDBObject}
 import com.mongodb.DBObject
-import java.util.{UUID, Date}
+import java.util.{ConcurrentModificationException, UUID, Date}
+import lock.LockManager
 import org.bson.types.BasicBSONList
 import query.{OpmSearcherHelper, OpmPropertyGreaterThanOrEqual, OpmPropertyLessThanOrEqual, OpmPropertyQuery, OpmSearcher}
 
@@ -24,7 +25,7 @@ import query.{OpmSearcherHelper, OpmPropertyGreaterThanOrEqual, OpmPropertyLessT
  * @since 8/22/12 12:18 PM
  */
 
-trait OpmMongoStorage[V <: OpmObject] extends OpmStorage[V] {
+trait OpmMongoStorage[V <: OpmObject] extends OpmStorage[V] with LockManager {
 
   import OpmFactory._
   import OpmIntrospection.{TimestampField, ClassField, MetaFields}
@@ -150,26 +151,56 @@ trait OpmMongoStorage[V <: OpmObject] extends OpmStorage[V] {
     // in which case we need to stitch. Or, he may have created a new object with this key,
     // and we need to completely replace the old timeline with this timeline. The only way to
     // be sure is to load what's in the database and try to find where the histories converge.
-    val oldModel = get(model.key)
-    require(oldModel.isDefined, "Tried to update %s; not already in the database".format(model))
-    val firstTimestamp = oldModel.get.opmTimestamp
-    val curStream = model #:: model.history
-    val alreadyWritten = curStream.dropWhile(_.timestamp > firstTimestamp)
-    if (!alreadyWritten.isEmpty && alreadyWritten.head.timestamp == firstTimestamp) {  // we need to stitch
-      // This is hard. I have a picture that might help explain this, but expect to invest some time
-      // forming the mental model if you really want to understand this.
-      val mongoStream = collection.find(MongoDBObject(Key -> model.key)).sort(sortFields).toStream.map(wrapDBObj(_))
-      val lastFrame  = mongoStream.take(wavelength)
-      require(!lastFrame.isEmpty, "No mongo records found for key %s; did you create first?".format(model.key))
-      val oldPhase = (wavelength + lastFrame.takeWhile(_.as[String](Type) == DiffType).size) % wavelength
-      val updateSize = curStream.takeWhile(_.timestamp > lastFrame.head.as[Long](Timestamp)).size
-      val startPhase = (wavelength - (updateSize % wavelength) + oldPhase) % wavelength
-      val initialDiffCount = (wavelength - startPhase) % wavelength
-      writeDiffs(model.key, curStream.zip(curStream.tail).take(initialDiffCount))
-      writeWavelets(model.key, curStream.drop(initialDiffCount).take(updateSize - initialDiffCount))
-    } else {  // we're rewriting history ... hope that's what you wanted
-      remove(model.key)
-      create(model)
+
+    // create lock object for model.key
+    // block for some amount of time if it is not available. Fail on timeout.
+    // Once we have the lock, confirm that model is a "fast forward" update of
+    // oldModel. If there is anything in oldModel that's not in model, blow an exception.
+    // then do the write and clear the lock.
+
+    import scala.util.control.Exception._
+    allCatch either this.lock(model.key) match {
+      case Right(lock) =>
+        try {
+          val oldModel = get(model.key)
+          require(oldModel.isDefined, "Tried to update %s; not already in the database".format(model))
+          val firstTimestamp = oldModel.get.opmTimestamp
+          val curStream = model #:: model.history
+          val alreadyWritten = curStream.dropWhile(_.timestamp > firstTimestamp)
+          if (!alreadyWritten.isEmpty && alreadyWritten.head.timestamp == firstTimestamp) {
+            // we need to stitch (but this is basically fast-forward)
+            // This is hard. I have a picture that might help explain this, but expect to invest some time
+            // forming the mental model if you really want to understand this.
+            val mongoStream = collection.find(MongoDBObject(Key -> model.key)).sort(sortFields).toStream.map(wrapDBObj(_))
+            val lastFrame = mongoStream.take(wavelength)
+            require(!lastFrame.isEmpty, "No mongo records found for key %s; did you create first?".format(model.key))
+            val oldPhase = (wavelength + lastFrame.takeWhile(_.as[String](Type) == DiffType).size) % wavelength
+            val updateSize = curStream.takeWhile(_.timestamp > lastFrame.head.as[Long](Timestamp)).size
+            val startPhase = (wavelength - (updateSize % wavelength) + oldPhase) % wavelength
+            val initialDiffCount = (wavelength - startPhase) % wavelength
+            writeDiffs(model.key, curStream.zip(curStream.tail).take(initialDiffCount))
+            writeWavelets(model.key, curStream.drop(initialDiffCount).take(updateSize - initialDiffCount))
+          } else {
+            // todo: this could be quite slow if there were many, many changes made since these were loaded!
+            // note this is an optimized version of:
+            //  if (!model.history.map(_.timestamp).toSet.intersect(oldModel.get.timeline.map(_.opmTimestamp).toSet).isEmpty) {
+            val intersect = !model.history.map(_.timestamp).flatMap(ts => oldModel.get.timeline.find(_.opmTimestamp == ts)).isEmpty
+            if (intersect) {
+              // model & oldModel share history, but the most recent oldModel timestamp is not in
+              // model's history (so our histories have diverged, and we don't know what to do)
+              throw new ConcurrentModificationException("Object %s was modified concurrently".format(model))
+            } else {
+              // we're rewriting (replacing!) history ... hope that's what you wanted
+              remove(model.key)
+              create(model)
+            }
+          }
+        } finally {
+          lock.unlock()
+        }
+      case Left(e) if e.getMessage.contains("Timed out") =>
+        sys.error("Could not acquire write lock for %s within %s ms".format(model.key, waitMs))
+      case Left(e) => throw e
     }
   }
 

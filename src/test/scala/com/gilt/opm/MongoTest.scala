@@ -24,17 +24,15 @@ object MongoTest {
     def name: String
   }
 
-  object SimpleDomain extends OpmMongoStorage[SimpleDomain] {
-    val collection = MongoConnection()("opm-MongoTest")("opm_simple")
-    collection.drop()
+  object SimpleDomain extends OpmMongoStorage[SimpleDomain] with CollectionHelper {
+    override val collectionName = "opm_simple"
   }
 }
 
-class MongoTest extends FunSuite with OpmMongoStorage[MongoTest.TestDomain] {
+class MongoTest extends FunSuite with OpmMongoStorage[MongoTest.TestDomain] with CollectionHelper {
   import MongoTest._
   import OpmFactory._
-  val collection = MongoConnection()("opm-MongoTest")("opm")
-  collection.drop()
+  override val collectionName = "opm"
 
   test("write 1000") {
     val count = 1000
