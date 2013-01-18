@@ -27,7 +27,7 @@ private[opm] case class LockImpl(key: String, col: MongoCollection)(implicit wri
   }
 }
 
-private object LockManager extends Loggable {
+private[lock] object LockManager extends Loggable {
   val pendingLocks = new ConcurrentHashMap[Lock, Lock].asScala
   sys.addShutdownHook {
     pendingLocks.values.foreach(_.unlock())
@@ -42,26 +42,35 @@ private object LockManager extends Loggable {
     }
     pendingLocks.remove(lock)
   }
+
+  val IdKey = "_id"
+  val TimestampKey = "ts"
 }
 
 trait LockManager extends Loggable {
+
+  import LockManager._
 
   def locks: MongoCollection
   def waitMs: Long = 100l
   def sleepMs: Long = 50l
   def writeConcern = CWriteConcern.valueOf("SAFE")
 
-  implicit lazy val _writeConcern = writeConcern
+  private implicit lazy val _writeConcern = writeConcern
 
-  import LockManager._
+  private lazy val installedIndex = {
+    locks.ensureIndex(MongoDBObject(TimestampKey -> 1))
+    true
+  }
 
   final def lock(key: String): Lock = {
+    installedIndex
     val now = System.currentTimeMillis()
     debug("Trying to acquire lock %s from %s with timestamp %s".format(key, locks, now))
     @tailrec
     def recurse(): Lock = {
       import scala.util.control.Exception._
-      allCatch either locks.insert(MongoDBObject("_id" -> key, "ts" -> now)) match {
+      allCatch either locks.insert(MongoDBObject(IdKey -> key, TimestampKey -> now)) match {
         case Right(_) =>
           val lock = LockImpl(key, locks)
           pendingLocks += (lock -> lock)

@@ -80,13 +80,14 @@ trait LockReaper extends Loggable {
   /** Finds & deletes stale locks. */
   protected def reap() {
     import scala.util.control.Exception._
+    import LockManager.{IdKey, TimestampKey}
     val now = System.currentTimeMillis()
-    val query = "ts" $lt (now - maxLifespanMs)
+    val query = TimestampKey $lt (now - maxLifespanMs)
     allCatch either locks.find(query).foreach {
       (dbObj: DBObject) =>
         val obj = wrapDBObj(dbObj)
         warn("Deleting expired lock %s last modified %s with lifetime %s (exceeded by %s ms)".format(
-          obj.as[String]("_id"), obj.as[Long]("ts"), maxLifespanMs, (now - obj.as[Long]("ts") - maxLifespanMs)))
+          obj.as[String](IdKey), obj.as[Long](TimestampKey), maxLifespanMs, (now - obj.as[Long](TimestampKey) - maxLifespanMs)))
         allCatch either locks.remove(obj) match {
           case Left(e) => error("Exception trying to remove lock %s".format(obj))
           case Right(_) => () // success
