@@ -307,7 +307,7 @@ trait OpmMongoStorage[V <: OpmObject] extends OpmStorage[V] with LockManager {
         } else {
           initialDiffs.reverse.foldLeft(Seq(lastValue)) {
             (objs: Seq[OpmProxy], dbObj: MongoDBObject) =>
-              val changes: Set[Diff] = objToDiffSet(dbObj, Forward)
+              val changes: Set[Diff] = objToDiffSet(dbObj, mf.erasure, Forward)
               OpmProxy(key, OpmFactory.evolve(objs.head.fields, changes)) +: objs
           }
         }
@@ -330,7 +330,7 @@ trait OpmMongoStorage[V <: OpmObject] extends OpmStorage[V] with LockManager {
           }
         }
 
-        assembleFinalObjects(initialObjs.toStream #::: loadStream(key, lastValue, mongoStream.drop(initialObjs.size))).headOption
+        assembleFinalObjects(initialObjs.toStream #::: loadStream(key, lastValue, mongoStream.drop(initialObjs.size), mf.erasure)).headOption
     }
   }
 
@@ -423,25 +423,33 @@ trait OpmMongoStorage[V <: OpmObject] extends OpmStorage[V] with LockManager {
     }
   }
 
-  private [this] def loadStream(key: String, head: OpmProxy, cursorStream: Stream[MongoDBObject]): Stream[OpmProxy] = {
+  private [this] def loadStream(key: String, head: OpmProxy, cursorStream: Stream[MongoDBObject], clazz: Class[_]): Stream[OpmProxy] = {
     cursorStream.headOption.map {
       prevObj =>
         if (prevObj.as[String](Type) == ValueType) {
           val prev = toOpmProxy(key, prevObj)
-          prev #:: loadStream(key, prev, cursorStream.tail)
+          prev #:: loadStream(key, prev, cursorStream.tail, clazz)
         } else {
           assert(prevObj.as[String](Type) == DiffType, "Unknown type: %s".format(prevObj))
-          val changes: Set[Diff] = objToDiffSet(prevObj, Reverse)
+          val changes: Set[Diff] = objToDiffSet(prevObj, clazz, Reverse)
           val prev = OpmProxy(key, OpmFactory.evolve(head.fields, changes))
-          prev #:: loadStream(key, prev, cursorStream.tail)
+          prev #:: loadStream(key, prev, cursorStream.tail, clazz)
         }
     }.getOrElse(Stream.empty)
   }
 
-  private [this] def objToDiffSet(obj: MongoDBObject, direction: String): Set[Diff] = {
+  private [this] def objToDiffSet(obj: MongoDBObject, clazz: Class[_], direction: String): Set[Diff] = {
     require(direction == Forward || direction == Reverse,
       "direction must be either %s or %s; was %s".format(Forward, Reverse, direction))
-    wrapDBObj(obj.as[DBObject](direction)).map(kv => Diff(kv._1.toString, Option(kv._2).map(v => mapFromMongo(kv._1.toString, None, v)))).toSet
+    val diffIterable = wrapDBObj(obj.as[DBObject](direction)).map {
+      case (key: String, null) => Diff(key, None)
+      case (key: String, value: Any) =>
+        val valueType =
+          if (OpmIntrospection.MetaFields.contains(key)) None
+          else Some(clazz.getMethod(key).getReturnType)
+        Diff(key, Some(mapFromMongo(key, valueType, value)))
+    }
+    diffIterable.toSet
   }
 
   private [this] def toOpmProxy(key: String, valueRecord: DBObject): OpmProxy = {

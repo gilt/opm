@@ -14,6 +14,9 @@ object MongoTest {
   trait TestDomain extends OpmObject {
     def id: Long
     def name: String
+    def count: Long
+    def maybeName: Option[String]
+    def maybeLong: Option[Long]
     def description: String
     def createdAt: Date
     def tags: Seq[String]
@@ -660,6 +663,39 @@ class MongoTest extends FunSuite with OpmMongoStorage[MongoTest.TestDomain] with
     // Two steps back, it meets the previous timeline
     assert(obj4.timeline.head.name == "name2")
     assert(obj4.timeline.tail == obj2.timeline)
+  }
+
+  test("update an Option via squashPut succeeds") {
+    val d1 =
+      OpmFactory.instance[TestDomain]("option-squashPut").
+        set(_.maybeName).to(Some("a")).
+        set(_.maybeLong).to(Some(100))
+    squashPut(d1)
+
+    val d2 =
+      OpmFactory.instance[TestDomain]("option-squashPut").
+        set(_.maybeName).to(Some("b")).
+        set(_.maybeLong).to(Some(200))
+    squashPut(d2)
+
+    val d3 = get("option-squashPut").get
+    assert(d3.maybeName == Some("b"))
+    assert(d3.maybeLong == Some(200))
+  }
+
+  test("update a non-String via squashPut succeeds") {
+    val d1 =
+      OpmFactory.instance[TestDomain]("option-squashPut").
+        set(_.count).to(100)
+    squashPut(d1)
+
+    val d2 =
+      OpmFactory.instance[TestDomain]("option-squashPut").
+        set(_.count).to(200)
+    squashPut(d2)
+
+    val d3 = get("option-squashPut").get
+    assert(d3.count == 200)
   }
 
   def assertOpmObjectAccessorFails(f: () => Any) {
