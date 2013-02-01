@@ -3,6 +3,7 @@ package com.gilt.opm
 import com.mongodb.casbah._
 import com.mongodb.casbah.Implicits._
 import com.mongodb.casbah.commons.Implicits.wrapDBObj
+import com.mongodb.casbah.{WriteConcern => CWriteConcern}
 import commons.{MongoDBList, MongoDBObject}
 import com.mongodb.DBObject
 import java.util.{ConcurrentModificationException, UUID, Date}
@@ -33,6 +34,9 @@ trait OpmMongoStorage[V <: OpmObject] extends OpmStorage[V] with LockManager {
   import OpmMongoStorage._
 
   def collection: MongoCollection
+
+  def writeConcern = CWriteConcern.valueOf("SAFE")
+  private implicit lazy val _writeConcern = writeConcern
 
   def wavelength: Int = 5           // value frame + (wavelength - 1) diff frames
   def toMongoMapper: Option[PartialFunction[(String, Option[Class[_]], AnyRef), AnyRef]] = None
@@ -568,7 +572,7 @@ trait OpmMongoStorage[V <: OpmObject] extends OpmStorage[V] with LockManager {
         b += field -> newValueType.map(mapToMongo(field, Some(later.fieldMethod(field).getReturnType), _))
         b
     }.result()
-    collection += builder.result()
+    collection.save(builder.result())
   }
 
   // writes a single value record
@@ -589,7 +593,7 @@ trait OpmMongoStorage[V <: OpmObject] extends OpmStorage[V] with LockManager {
         b += f._1 -> mapToMongo(f._1, Some(obj.fieldMethod(f._1).getReturnType), f._2)
         b
     }.result
-    collection += builder.result()
+    collection.save(builder.result())
   }
 }
 

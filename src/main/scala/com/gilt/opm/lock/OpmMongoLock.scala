@@ -54,9 +54,8 @@ trait LockManager extends Loggable {
   def locks: MongoCollection
   def waitMs: Long = 100l
   def sleepMs: Long = 50l
-  def writeConcern = CWriteConcern.valueOf("SAFE")
 
-  private implicit lazy val _writeConcern = writeConcern
+  private implicit lazy val _lockWriteConcern = CWriteConcern.valueOf("SAFE")
 
   private lazy val installedIndex = {
     locks.ensureIndex(MongoDBObject(TimestampKey -> 1))
