@@ -216,7 +216,10 @@ trait OpmMongoStorage[V <: OpmObject] extends OpmStorage[V] with LockManager {
 
   private [this] val sortFields = MongoDBObject(Timestamp -> -1, Type -> 1)
 
+  private lazy val installedKeyIndex: Unit = collection.ensureIndex(MongoDBObject(Key -> 1))
+
   override def put(obj: V)(implicit mf: Manifest[V]) {
+    installedKeyIndex
     val model: OpmProxy = recoverModel(obj)
     require(model.key != OpmIntrospection.UndefinedKey, "You can't put an object created without a key")
     if (collection.findOne(MongoDBObject(Key -> model.key)).isEmpty) {
