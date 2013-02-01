@@ -164,6 +164,7 @@ trait OpmMongoStorage[V <: OpmObject] extends OpmStorage[V] with LockManager {
       val timestamp = mongoDbObject.as[Long](Timestamp)
       val key = mongoDbObject.as[String](Key)
       val clazz = Class.forName(className)
+      assert(classOf[OpmObject].isAssignableFrom(clazz))
       val loadedOpt = nestedToStorage(None)(Manifest.classType(clazz)).map {
         storage: OpmStorage[_] =>
           storage.get(key)(Manifest.classType(clazz))
@@ -172,7 +173,8 @@ trait OpmMongoStorage[V <: OpmObject] extends OpmStorage[V] with LockManager {
       }
       loadedOpt.map {
         opm =>
-          opm.asInstanceOf[OpmObject].timeline.find(_.opmTimestamp == timestamp).getOrElse {
+          val richOpm = toSetter(opm.asInstanceOf[OpmObject])(Manifest.classType(clazz))
+          richOpm.timeline.find(_.opmTimestamp == timestamp).getOrElse {
               sys.error("Could not load an object(%s, %s) with opmTimestamp %s".format(className, key, timestamp))
           }
       }.getOrElse {

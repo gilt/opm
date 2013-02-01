@@ -88,11 +88,28 @@ class NestedOpmMongoTest extends FunSuite with OpmMongoStorage[NestedMongoTest.O
     assert(loadedA.get.b.get.c.get.d === d)
   }
 
+  test("OpmObject optional nesting with changes") {
+    val d = instance[OpmD]("d-optional-changed").set(_.name).to("hello, D")
+    val c = instance[OpmC]("c-optional-changed", Map("name" -> "hello, C", "d" -> d))
+    val b = instance[OpmB]("b-optional-changed").set(_.name).to("hello, B").set(_.c).to(Some(c))
+    val a = instance[OpmA]("a-optional-changed").set(_.id).to(3).set(_.b).to(Some(b))
+    put(a)
+
+    val loadedA = get(a.opmKey)
+    val changedB = loadedA.get.b.get.asInstanceOf[OpmB].set(_.name).to("changed")
+    val changedA = loadedA.get.set(_.b).to(Some(changedB))
+    put(changedA)
+
+    val loadedChangedA = get(a.opmKey)
+    assert(loadedChangedA.get === changedA)
+    assert(loadedChangedA.get.b.get === changedB)
+  }
+
   test("OpmObject nesting with pending") {
-    val d = instance[OpmD]("d").set(_.name).toPending(1000, TimeUnit.MILLISECONDS)
-    val c = instance[OpmC]("c", Map("name" -> "hello, C", "d" -> d))
-    val b = instance[OpmB]("b").set(_.name).to("hello, B").set(_.c).to(Some(c))
-    val a = instance[OpmA]("a").set(_.id).to(3).set(_.b).to(Some(b))
+    val d = instance[OpmD]("d-pending").set(_.name).toPending(1000, TimeUnit.MILLISECONDS)
+    val c = instance[OpmC]("c-pending", Map("name" -> "hello, C", "d" -> d))
+    val b = instance[OpmB]("b-pending").set(_.name).to("hello, B").set(_.c).to(Some(c))
+    val a = instance[OpmA]("a-pending").set(_.id).to(3).set(_.b).to(Some(b))
     put(a)
 
     val loadedA = get(a.opmKey)
