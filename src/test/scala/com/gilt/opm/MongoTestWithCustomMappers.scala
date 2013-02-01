@@ -33,7 +33,7 @@ class MongoTestWithCustomMappers extends FunSuite with OpmMongoStorage[MongoTest
   import OpmFactory._
   override val collectionName = "opm_custom_mappers"
 
-  override def toMongoMapper: Option[PartialFunction[(String, Option[Class[_]], AnyRef), AnyRef]] = {
+  override def toMongoMapper: OpmToMongoMapper = {
     Some {
       {
         case ("id", _, str) => str.asInstanceOf[Long].asInstanceOf[AnyRef]
@@ -51,7 +51,7 @@ class MongoTestWithCustomMappers extends FunSuite with OpmMongoStorage[MongoTest
     }
   }
 
-  override def fromMongoMapper: Option[PartialFunction[(String, Option[Class[_]], AnyRef), AnyRef]] = {
+  override def fromMongoMapper: OpmFromMongoMapper = {
     def m(obj: Any): MongoDBObject = wrapDBObj(obj.asInstanceOf[DBObject])
     Some {
       {

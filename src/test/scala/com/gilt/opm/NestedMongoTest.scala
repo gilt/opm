@@ -133,7 +133,7 @@ class NestedNonMongoTest extends FunSuite with OpmMongoStorage[NestedMongoTest.O
 
   override val collectionName = "nested-non-opm"
 
-  override def toMongoMapper: Option[PartialFunction[(String, Option[Class[_]], AnyRef), AnyRef]] =
+  override def toMongoMapper: OpmToMongoMapper =
     Some {
       {
         case maybeB if maybeB._3.isInstanceOf[B] => {
@@ -144,7 +144,7 @@ class NestedNonMongoTest extends FunSuite with OpmMongoStorage[NestedMongoTest.O
         }
       }
     }
-  override def fromMongoMapper: Option[PartialFunction[(String, Option[Class[_]], AnyRef), AnyRef]] = Some(
+  override def fromMongoMapper: OpmFromMongoMapper = Some(
     {
       case maybeB if maybeB._1 == "b" =>
         val m = wrapDBObj(maybeB._3.asInstanceOf[DBObject])
