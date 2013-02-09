@@ -10,6 +10,8 @@ object OpmIntrospection {
   val TimestampField = "__t__"
 
   val MetaFields = Set(ClassField, TimestampField)
+
+  val UndefinedKey = "__undefined"
 }
 
 trait OpmFactory {
@@ -19,7 +21,15 @@ trait OpmFactory {
   import OpmIntrospection._
   import OpmFactory.{introspectionMode, ModelExposeException, introspectionScratch, Scratch, recoverModel}
 
-  def instance[T <: OpmObject : Manifest](key: String): T = {
+  /**
+   * If you want to create an instance that gets persisted, you MUST give it a key when you create it.
+   * Not creating a key is convenient for memory-only use cases, like the builder/blackboard features of opm.
+   * @param key persistence key for the timeline. Should be unique across all timelines
+   * @tparam T Type of object this should wrap
+   * @return A fresh, "empty" instance
+   * @see OpmObject.opmIsComplete
+   */
+  def instance[T <: OpmObject : Manifest](key: String = UndefinedKey): T = {
     newProxy(model = OpmProxy(key, Map(ClassField -> manifest.erasure, TimestampField -> clock())))
   }
 
