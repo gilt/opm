@@ -37,7 +37,7 @@ trait OpmFactory {
 
     // new in 0.0.10: anything that is non-optional, MUST be set.
     // no nulls allowed.
-    val missing = missingFields(init)
+    val missing = missingFields(init, ignoreOption = true)
     require(missing.isEmpty, "Not all required field set: %s".format(missing.mkString(",")))
     newProxy(model = OpmProxy(key, init ++ Map(ClassField -> manifest.erasure, TimestampField -> clock())))
   }
@@ -56,8 +56,8 @@ trait OpmFactory {
     manifest.erasure.getMethods.filterNot(m => opmFieldNames.contains(m.getName) || (m.getParameterTypes.length > 0))
 
   // return an array of fields not set in this map
-  private [opm] def missingFields[T <: OpmObject : Manifest](init: Map[String, Any]): Array[String] = {
-    fields.filterNot(_.getReturnType.isAssignableFrom((classOf[Option[_]]))).map(_.getName).filterNot(init.contains)
+  private [opm] def missingFields[T <: OpmObject : Manifest](init: Map[String, Any], ignoreOption: Boolean): Array[String] = {
+    fields.filterNot(ignoreOption && _.getReturnType.isAssignableFrom((classOf[Option[_]]))).map(_.getName).filterNot(init.contains)
   }
 
   private[opm] def newProxy[T: Manifest](model: OpmProxy): T = {
@@ -98,6 +98,8 @@ trait OpmFactory {
             } else {
               model.key.asInstanceOf[AnyRef]
             }
+          case "opmIsComplete" =>
+            java.lang.Boolean.valueOf(missingFields(model.fields, ignoreOption = false)(model.manifest).isEmpty)
           case fieldName if method.getParameterTypes.isEmpty =>
             if (introspectionMode.get) {
               val stack = introspectionScratch.get()

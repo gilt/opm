@@ -72,9 +72,9 @@ trait OpmMongoStorage[V <: OpmObject] extends OpmStorage[V] with LockManager {
       builder += Classname -> proxy.clazz.getName
       builder += Timestamp -> proxy.timestamp
       builder += Key -> proxy.key
-      nestedToStorage(Option(o.asInstanceOf[OpmObject]))(Manifest.classType(Class.forName(proxy.clazz.getName))).foreach {
+      nestedToStorage(Option(o.asInstanceOf[OpmObject]))(proxy.manifest).foreach {
         storage =>
-          storage.maybePut(o.asInstanceOf[OpmObject])(Manifest.classType(Class.forName(proxy.clazz.getName)))
+          storage.maybePut(o.asInstanceOf[OpmObject])(proxy.manifest)
       }
       builder.result()
   }
@@ -206,6 +206,7 @@ trait OpmMongoStorage[V <: OpmObject] extends OpmStorage[V] with LockManager {
 
   override def put(obj: V)(implicit mf: Manifest[V]) {
     val model: OpmProxy = recoverModel(obj)
+    require(model.key != OpmIntrospection.UndefinedKey, "You can't put an object created without a key")
     if (collection.findOne(MongoDBObject(Key -> model.key)).isEmpty) {
       create(model)
     } else {

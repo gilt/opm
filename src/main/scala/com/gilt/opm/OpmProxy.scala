@@ -25,4 +25,6 @@ private [opm] case class OpmProxy(key: String, fields: Map[String, Any], history
   def timestamp: Long = fields(TimestampField).asInstanceOf[Long]
 
   def fieldMethod(field: String): Method = clazz.getMethod(field)
+
+  lazy val manifest: Manifest[OpmObject] = Manifest.classType(clazz)
 }

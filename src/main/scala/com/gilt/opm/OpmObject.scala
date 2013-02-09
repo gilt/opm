@@ -10,5 +10,15 @@ trait OpmObject {
   // refuse to apply the implicit conversion.
   final def opmKey: String = ""
   final def opmTimestamp: Long = 0L
+
+  /**
+   * There are 2 ways to create an opm object: you can create an "empty" one, or you can pass in a map of initial
+   * values.  If you pass in the map, opm verifies that everything that isn't optional is defined,
+   * but you can also create an "empty" opm object, which will blow exceptions on access if you are trying to
+   * get hold of something that doesn't exist. This method tells you whether the object is safe to access, and
+   * is useful when using opm as a builder or blackboard object, to tell when it has been fully populated.
+   * @return true if the object is fully populated.
+   */
+  final def opmIsComplete: Boolean = false
 }
 
