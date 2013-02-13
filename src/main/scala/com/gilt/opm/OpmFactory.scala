@@ -100,6 +100,8 @@ trait OpmFactory {
             }
           case "opmIsComplete" =>
             java.lang.Boolean.valueOf(missingFields(model.fields, ignoreOption = false)(model.manifest).isEmpty)
+          case "opmIsBuilder" =>
+            (model.key == UndefinedKey).asInstanceOf[AnyRef]
           case fieldName if method.getParameterTypes.isEmpty =>
             if (introspectionMode.get) {
               val stack = introspectionScratch.get()
@@ -166,13 +168,13 @@ object OpmFactory extends OpmFactory {
     }
   }
 
-  private [opm] def diffModels(thisModel: OpmProxy, thatModel: OpmProxy): Set[Diff] = {
+  private [opm] def diffModels(thisModel: OpmProxy, thatModel: OpmProxy, isBuilder: Boolean = false): Set[Diff] = {
     import OpmIntrospection._
-    require(thisModel.clazz.getName == thatModel.clazz.getName,
-      ("We don't support changing class (yet ... request the feature if you need it) " +
+    require(thisModel.clazz.isAssignableFrom(thatModel.clazz),
+      ("We only support changing class to traits mixed into the class ( ... request additional leeway if you need it) " +
         "(this = %s, that = %s)").format(thisModel.clazz, thatModel.clazz))
     val allFields = (thisModel.fields.map(_._1).toSet ++ thatModel.fields.map(_._1)).filterNot(MetaFields)
-    val diffs = for (field <- allFields) yield {
+    val diffs = for (field <- allFields if (!isBuilder || thisModel.fields.get(field).isDefined)) yield {
       (thisModel.fields.get(field), thatModel.fields.get(field)) match {
         case (None, Some(any)) => Some(Diff(field, None))
         case (any@Some(_), None) => Some(Diff(field, any))

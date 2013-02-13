@@ -30,6 +30,18 @@ object MongoTest {
   object SimpleDomain extends OpmMongoStorage[SimpleDomain] with CollectionHelper {
     override val collectionName = "opm_simple"
   }
+
+  trait Named extends OpmObject {
+    def name: String
+  }
+
+  trait TestClass extends Named {
+    def id: Long
+  }
+
+  object TestClass extends OpmMongoStorage[TestClass] with CollectionHelper {
+    override val collectionName = "opm_test_class"
+  }
 }
 
 class MongoTest extends FunSuite with OpmMongoStorage[MongoTest.TestDomain] with CollectionHelper {
@@ -696,6 +708,33 @@ class MongoTest extends FunSuite with OpmMongoStorage[MongoTest.TestDomain] with
 
     val d3 = get("option-squashPut").get
     assert(d3.count == 200)
+  }
+
+  test("evolve from trait succeeds in writing to Mongo") {
+    import MongoTest.TestClass
+    val d1 =
+      OpmFactory.instance[TestClass]("test_class_1").
+        set(_.id).to(1).
+        prune
+
+    TestClass.put(d1)
+
+    val d2 =
+      OpmFactory.instance[Named]().
+        set(_.name).to("name1").
+        prune
+
+    val d3 = TestClass.get("test_class_1")
+    assert(d3.map(_.id) === Some(1))
+
+    val d4 = d3.get evolve d2
+
+    TestClass.squashPut(d4)
+
+    val d5 = TestClass.get("test_class_1")
+    assert(d5.map(_.id) === Some(1))
+    assert(d5.map(_.name) === Some("name1"))
+    assert(d5.get.timeline.size === 2)
   }
 
   def assertOpmObjectAccessorFails(f: () => Any) {

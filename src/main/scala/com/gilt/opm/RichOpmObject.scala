@@ -97,8 +97,8 @@ case class RichOpmObject[T <: OpmObject : Manifest](obj: T, factory: OpmFactory)
   // a diff b returns the set of changes such that
   // b evolve (a diff b) == a
   // (so, the set of changes to transform that into this)
-  def diff(that: RichOpmObject[T]): Set[Diff] = {
-    diffModels(model, that.model)
+  def diff(that: RichOpmObject[_]): Set[Diff] = {
+    diffModels(model, that.model, this.obj.opmIsBuilder)
   }
 
   def -:-(that: RichOpmObject[T]): Set[Diff] = this.diff(that)
@@ -107,5 +107,7 @@ case class RichOpmObject[T <: OpmObject : Manifest](obj: T, factory: OpmFactory)
     instance(model.copy(fields = OpmFactory.evolve(model.fields, changes),
       history = model #:: model.history))
   }
+
+  def evolve(that: RichOpmObject[_]): T = evolve(that.diff(this))
 }
 

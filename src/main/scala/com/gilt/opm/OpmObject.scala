@@ -20,5 +20,7 @@ trait OpmObject {
    * @return true if the object is fully populated.
    */
   final def opmIsComplete: Boolean = false
+
+  final def opmIsBuilder: Boolean = false
 }
 

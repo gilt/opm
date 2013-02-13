@@ -12,29 +12,27 @@ import org.scalatest.matchers.ShouldMatchers
 
 object OpmTest {
 
-  trait Foo extends OpmObject {
-    def id: Long
-
+  trait Named extends OpmObject {
     def name: String
+  }
+
+  trait Foo extends Named {
+    def id: Long
 
     def bar: Option[Bar]
   }
 
   trait SubFoo extends Foo {}
 
-  trait Bar extends OpmObject {
-    def name: String
-
+  trait Bar extends Named {
     def things: Set[String]
   }
 
-  trait MixOfOptionalNonOptional extends OpmObject {
-    def name: String
+  trait MixOfOptionalNonOptional extends Named {
     def value: Option[String]
   }
 
-  trait MixOfOptionalNonOptionalWithMethod extends OpmObject {
-    def name: String
+  trait MixOfOptionalNonOptionalWithMethod extends Named {
     def value: Option[String]
 
     override def equals(obj: Any) = obj match {
@@ -49,7 +47,7 @@ object OpmTest {
 
 class OpmTest extends FunSuite with ShouldMatchers with OpmFactory {
 
-  import OpmTest.{Foo, Bar, SubFoo, MixOfOptionalNonOptional, MixOfOptionalNonOptionalWithMethod}
+  import OpmTest.{Foo, Bar, SubFoo, MixOfOptionalNonOptional, MixOfOptionalNonOptionalWithMethod, Named}
 
   var time = 0l
 
@@ -139,6 +137,23 @@ class OpmTest extends FunSuite with ShouldMatchers with OpmFactory {
     assert(bp === b)
   }
 
+  test("basic diff & evolution, direct call") {
+    val a = instance[Foo]("", Map("name" -> "a", "id" -> 0l, "bar" -> instance[Bar]("", Map("name" -> "barA", "things" -> Set("keg", "glass", "stool")))))
+    val b = instance[Foo]("", Map("name" -> "b", "id" -> 1l, "bar" -> instance[Bar]("", Map("name" -> "barB", "things" -> Set("ken", "malibu cruiser")))))
+
+    val bp = a evolve b
+    assert(bp === b)
+  }
+
+  test("diff from builder object, then evolution") {
+    val a = instance[Foo]("", Map("name" -> "a", "id" -> 0l, "bar" -> instance[Bar]("", Map("name" -> "barA", "things" -> Set("keg", "glass", "stool")))))
+    val b = instance[Foo]().set(_.id).to(1l)
+
+    val bp = a evolve b
+    assert(bp.id === 1l)
+    assert(bp.name === "a")
+  }
+
   test("evolve removing a field") {
     val a = instance[Foo]("", Map("name" -> "a", "id" -> 0l, "bar" -> instance[Bar]("", Map("name" -> "bar", "things" -> Set("pub")))))
     val b = instance[Foo]("", Map("name" -> "b", "id" -> 1l))
@@ -180,18 +195,30 @@ class OpmTest extends FunSuite with ShouldMatchers with OpmFactory {
   test("diff type constraints") {
     evaluating {
       instance[Foo]("") diff
-        new Foo {
-          def id = 0L
-
+        new Bar {
           def name = null
 
-          def bar = null
+          def things = Set.empty[String]
         }.asInstanceOf[Foo]
     } should produce[RuntimeException]
 
     evaluating {
-      instance[Foo]("") diff instance[SubFoo]("")
+      instance[Foo]("") diff instance[Bar]("")
     } should produce[RuntimeException]
+  }
+
+  // test diff across sub-types should not fail
+  test("diff sub-type is possible") {
+    instance[Foo]("") diff instance[SubFoo]("")
+  }
+
+  test("evolve from trait only") {
+    val a = instance[Foo]("", Map("name" -> "a", "id" -> 0l, "bar" -> instance[Bar]("", Map("name" -> "barA", "things" -> Set("keg", "glass", "stool")))))
+    val b = instance[Named]().set(_.name).to("b")
+
+    val bp = a evolve b
+    assert(bp.id === 0l)
+    assert(bp.name === "b")
   }
 
   test("required fields present") {
