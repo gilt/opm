@@ -88,6 +88,28 @@ class NanoTimestamp(val time: Long) extends Comparable[NanoTimestamp] {
     }
   }
 
+  def >(o: NanoTimestamp) = compareTo(o) == 1
+
+  def >=(o: NanoTimestamp) = compareTo(o) >= 0
+
+  def <(o: NanoTimestamp) = compareTo(o) == -1
+
+  def <=(o: NanoTimestamp) = compareTo(o) <= 0
+
+  /**
+   * Add nanoseconds to the current timestamp
+   *
+   * @param duration This should be in nanoseconds.
+   */
+  def +(duration: Long) = NanoTimestamp(this.time + duration)
+
+  /**
+   * Subtract nanoseconds to the current timestamp
+   *
+   * @param duration This should be in nanoseconds.
+   */
+  def -(duration: Long) = NanoTimestamp(this.time - duration)
+
   @JsonValue
   def asString(): String = toString()
 }
@@ -98,6 +120,8 @@ object NanoTimestamp {
   def apply(timestamp: Long) = new NanoTimestamp(timestamp)
   def apply(timestamp: Timestamp) = new NanoTimestamp(timestamp)
   def apply(timestamp: Timestamp, ns: Long) = new NanoTimestamp(timestamp, ns)
+
+  def now = new NanoTimestamp()
 
   /**
    * FOR TESTING ONLY. Used to replace the clock with a fixed time.

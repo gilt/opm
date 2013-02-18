@@ -2,6 +2,8 @@ package com.gilt.opm
 
 import org.scalatest.{BeforeAndAfterAll, FunSuite}
 import com.mongodb.casbah.MongoConnection
+import java.util.concurrent.TimeUnit
+import org.scalatest.matchers.ShouldMatchers
 
 /**
  * Document Me.
@@ -45,7 +47,7 @@ object NestedMongoTest {
 
 }
 
-class NestedOpmMongoTest extends FunSuite with OpmMongoStorage[NestedMongoTest.OpmA] with CollectionHelper with BeforeAndAfterAll {
+class NestedOpmMongoTest extends FunSuite with OpmMongoStorage[NestedMongoTest.OpmA] with CollectionHelper with BeforeAndAfterAll with ShouldMatchers {
   import NestedMongoTest._
   import OpmFactory._
   import CollectionHelper.databaseName
@@ -84,6 +86,40 @@ class NestedOpmMongoTest extends FunSuite with OpmMongoStorage[NestedMongoTest.O
     assert(loadedA.get.b.get === b)
     assert(loadedA.get.b.get.c.get === c)
     assert(loadedA.get.b.get.c.get.d === d)
+  }
+
+  test("OpmObject nesting with pending") {
+    val d = instance[OpmD]("d").set(_.name).toPending(1000, TimeUnit.MILLISECONDS)
+    val c = instance[OpmC]("c", Map("name" -> "hello, C", "d" -> d))
+    val b = instance[OpmB]("b").set(_.name).to("hello, B").set(_.c).to(Some(c))
+    val a = instance[OpmA]("a").set(_.id).to(3).set(_.b).to(Some(b))
+    put(a)
+
+    val loadedA = get(a.opmKey)
+    assert(loadedA.get === a)
+    assert(loadedA.get.id === 3)
+    assert(loadedA.get.b.get === b)
+    assert(loadedA.get.b.get.name === "hello, B")
+    assert(loadedA.get.b.get.c.get === c)
+    assert(loadedA.get.b.get.c.get.name === "hello, C")
+    assert(loadedA.get.b.get.c.get.d === d)
+    val caught1 = evaluating {
+      loadedA.get.b.get.c.get.d.name
+    } should produce[RuntimeException]
+    assert(caught1 match {
+      case PendingOpmValueException(message) => true
+      case e: NoSuchElementException => false
+    })
+    assert(loadedA.get.isPending(_.b.get.c.get.d.name))
+    Thread.sleep(1000)
+    val caught2 = evaluating {
+      loadedA.get.b.get.c.get.d.name
+    } should produce[RuntimeException]
+    assert(caught2 match {
+      case PendingOpmValueException(message) => false
+      case e: NoSuchElementException => true
+    })
+    assert(!loadedA.get.isPending(_.b.get.c.get.d.name))
   }
 }
 

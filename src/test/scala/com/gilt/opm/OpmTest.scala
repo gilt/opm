@@ -2,6 +2,9 @@ package com.gilt.opm
 
 import org.scalatest.FunSuite
 import org.scalatest.matchers.ShouldMatchers
+import java.util.concurrent.TimeUnit
+import com.gilt.opm.OpmFactory.PendingOpmValueException
+import java.util.NoSuchElementException
 
 /**
  * Document Me.
@@ -14,6 +17,7 @@ object OpmTest {
 
   trait Named extends OpmObject {
     def name: String
+    def optName: Option[String] = None
   }
 
   trait Foo extends Named {
@@ -244,4 +248,337 @@ class OpmTest extends FunSuite with ShouldMatchers with OpmFactory {
     assert(foo2.bar === None)
   }
 
+  test("set pending") {
+    val a = instance[Foo]().
+      set(_.id).to(1L).
+      set(_.name).toPending(500, TimeUnit.MILLISECONDS)
+    val caught = evaluating {
+      a.name
+    } should produce[RuntimeException]
+    assert(caught match {
+      case PendingOpmValueException(message) => true
+      case e: NoSuchElementException => false
+    })
+    assert(a.isPending(_.name))
+  }
+
+  test("remove pending") {
+    val a = instance[Foo]().
+      set(_.id).to(1L).
+      set(_.name).toPending(100, TimeUnit.MILLISECONDS)
+    assert(a.isPending(_.name))
+    val b = a.set(_.name).toNotPending()
+    assert(!b.isPending(_.name))
+  }
+
+  test("remove pending on set field does nothing") {
+    val a = instance[Foo]().
+      set(_.id).to(1L).
+      set(_.name).to("name1")
+    assert(!a.isPending(_.name))
+    val b = a.set(_.name).toNotPending()
+    assert(!b.isPending(_.name))
+  }
+
+  test("set pending when previous value is None") {
+    val a = instance[Foo]().
+      set(_.id).to(1L).
+      set(_.optName).to(None).
+      set(_.optName).toPending(500, TimeUnit.MILLISECONDS)
+    val caught = evaluating {
+      a.optName
+    } should produce[RuntimeException]
+    assert(caught match {
+      case PendingOpmValueException(message) => true
+      case e: NoSuchElementException => false
+    })
+    assert(a.isPending(_.optName))
+  }
+
+  test("pending should expire") {
+    val a = instance[Foo]().
+      set(_.id).to(1L).
+      set(_.name).toPending(100, TimeUnit.MILLISECONDS)
+    Thread.sleep(101)
+    val caught = evaluating {
+      a.name
+    } should produce[RuntimeException]
+    assert(caught match {
+      case PendingOpmValueException(message) => false
+      case e: NoSuchElementException => true
+    })
+    assert(!a.isPending(_.name))
+  }
+
+  test("pending should clear when value is set") {
+    val a = instance[Foo]().
+      set(_.id).to(1L).
+      set(_.name).toPending(1000, TimeUnit.MILLISECONDS)
+    val caught = evaluating {
+      a.name
+    } should produce[RuntimeException]
+    assert(caught match {
+      case PendingOpmValueException(message) => true
+      case e: NoSuchElementException => false
+    })
+    val b = a.set(_.name).to("name1")
+    assert(b.name === "name1")
+    assert(!b.isPending(_.name))
+  }
+
+  test("don't set pending on field that has already been set to a value") {
+    val a = instance[Foo]().
+      set(_.name).to("a")
+    val b = a.set(_.name).toPending(100, TimeUnit.MILLISECONDS)
+    assert(b.name === "a")
+    assert(a.opmTimestamp == b.opmTimestamp)
+    assert(!b.isPending(_.name))
+  }
+
+  test("don't set pending on field that has already been set to pending") {
+    val a = instance[Foo]().
+      set(_.name).toPending(500, TimeUnit.MILLISECONDS)
+    Thread.sleep(10)
+    val b = a.set(_.name).toPending(10, TimeUnit.SECONDS)
+    assert(a.opmTimestamp == b.opmTimestamp)
+    val caught1 = evaluating {
+      b.name
+    } should produce[RuntimeException]
+    assert(caught1 match {
+      case PendingOpmValueException(message) => true
+      case e: NoSuchElementException => false
+    })
+    Thread.sleep(500)
+    val caught2 = evaluating {
+      b.name
+    } should produce[RuntimeException]
+    assert(caught2 match {
+      case PendingOpmValueException(message) => false
+      case e: NoSuchElementException => true
+    })
+  }
+
+  test("set pending on field on which previous pending has expired") {
+    val a = instance[Foo]().
+      set(_.name).toPending(500, TimeUnit.MILLISECONDS)
+    Thread.sleep(10)
+    val b = a.set(_.name).toPending(10, TimeUnit.SECONDS)
+    assert(a.opmTimestamp == b.opmTimestamp)
+    val caught1 = evaluating {
+      b.name
+    } should produce[RuntimeException]
+    assert(caught1 match {
+      case PendingOpmValueException(message) => true
+      case e: NoSuchElementException => false
+    })
+    Thread.sleep(500)
+    val caught2 = evaluating {
+      b.name
+    } should produce[RuntimeException]
+    assert(caught2 match {
+      case PendingOpmValueException(message) => false
+      case e: NoSuchElementException => true
+    })
+    val c = a.set(_.name).toPending(500, TimeUnit.MILLISECONDS)
+    assert(a.opmTimestamp != c.opmTimestamp)
+    val caught3 = evaluating {
+      c.name
+    } should produce[RuntimeException]
+    assert(caught3 match {
+      case PendingOpmValueException(message) => true
+      case e: NoSuchElementException => false
+    })
+    val d = b.set(_.name).toPending(500, TimeUnit.MILLISECONDS)
+    assert(b.opmTimestamp != d.opmTimestamp)
+    val caught4 = evaluating {
+      d.name
+    } should produce[RuntimeException]
+    assert(caught4 match {
+      case PendingOpmValueException(message) => true
+      case e: NoSuchElementException => false
+    })
+  }
+
+  test("don't set pending on field that has already been set to pending then set a value") {
+    val a = instance[Foo]().
+      set(_.name).toPending(1000, TimeUnit.MILLISECONDS)
+    val caught = evaluating {
+      a.name
+    } should produce[RuntimeException]
+    assert(caught match {
+      case PendingOpmValueException(message) => true
+      case e: NoSuchElementException => false
+    })
+    val b = a.set(_.name).to("name1")
+    assert(b.name === "name1")
+    val c = b.set(_.name).toPending(1000, TimeUnit.MILLISECONDS)
+    assert(c == b)
+    assert(c.opmTimestamp == b.opmTimestamp)
+  }
+
+  test("evolve from pending trait") {
+    val a = instance[Foo]().set(_.id).to(0l)
+    val b = instance[Named]().set(_.name).toPending(100, TimeUnit.MILLISECONDS)
+
+    val bp = a evolve b
+    assert(bp.id === 0l)
+
+    val caught1 = evaluating {
+      bp.name
+    } should produce[RuntimeException]
+    assert(caught1 match {
+      case PendingOpmValueException(message) => true
+      case e: NoSuchElementException => false
+    })
+    assert(bp.isPending(_.name))
+    Thread.sleep(100)
+    val caught2 = evaluating {
+      bp.name
+    } should produce[RuntimeException]
+    assert(caught2 match {
+      case PendingOpmValueException(message) => false
+      case e: NoSuchElementException => true
+    })
+    assert(!bp.isPending(_.name))
+  }
+
+  test("evolve from pending optional trait set to None") {
+    val a = instance[Foo]().set(_.id).to(0l).set(_.optName).to(None)
+    val b = instance[Named]().set(_.optName).toPending(100, TimeUnit.MILLISECONDS)
+
+    val bp = a evolve b
+    assert(bp.id === 0l)
+
+    val caught1 = evaluating {
+      bp.optName
+    } should produce[RuntimeException]
+    assert(caught1 match {
+      case PendingOpmValueException(message) => true
+      case e: NoSuchElementException => false
+    })
+    Thread.sleep(100)
+    val caught2 = evaluating {
+      bp.optName
+    } should produce[RuntimeException]
+    assert(caught2 match {
+      case PendingOpmValueException(message) => false
+      case e: NoSuchElementException => true
+    })
+  }
+
+  test("evolve from pending sets value when set") {
+    val a = instance[Foo]().set(_.id).to(0l).set(_.name).toPending(100, TimeUnit.MILLISECONDS)
+    val b = instance[Named]().set(_.name).to("name1")
+
+    val caught = evaluating {
+      a.name
+    } should produce[RuntimeException]
+    assert(caught match {
+      case PendingOpmValueException(message) => true
+      case e: NoSuchElementException => false
+    })
+    val bp = a evolve b
+    assert(bp.id === 0l)
+    assert(bp.name === "name1")
+    assert(bp.opmTimestamp != a.opmTimestamp)
+    assert(!bp.isPending(_.name))
+  }
+
+  test("evolve from pending trait does nothing when already set") {
+    val a = instance[Foo]("", Map("name" -> "a", "id" -> 0l, "bar" -> instance[Bar]("", Map("name" -> "barA", "things" -> Set("keg", "glass", "stool")))))
+    val b = instance[Named]().set(_.name).toPending(100, TimeUnit.MILLISECONDS)
+
+    val bp = a evolve b
+    assert(bp.id === 0l)
+    assert(bp.name === "a")
+    assert(bp.opmTimestamp == a.opmTimestamp)
+    assert(!bp.isPending(_.name))
+  }
+
+  test("evolve to not pending") {
+    val a = instance[Foo]().set(_.id).to(0l).set(_.name).toPending(100, TimeUnit.MILLISECONDS)
+    val b = instance[Named]().set(_.name).toNotPending()
+
+    val bp = a evolve b
+    assert(bp.id === 0l)
+    assert(bp.opmTimestamp != a.opmTimestamp)
+    assert(!bp.isPending(_.name))
+  }
+
+  test("evolve to not pending does nothing when already set") {
+    val a = instance[Foo]("", Map("name" -> "a", "id" -> 0l, "bar" -> instance[Bar]("", Map("name" -> "barA", "things" -> Set("keg", "glass", "stool")))))
+    val b = instance[Named]().set(_.name).toNotPending()
+
+    val bp = a evolve b
+    assert(bp.id === 0l)
+    assert(bp.name === "a")
+    assert(bp.opmTimestamp == a.opmTimestamp)
+    assert(!bp.isPending(_.name))
+  }
+
+  test("evolve from pending trait does nothing when already pending") {
+    val a = instance[Foo]().set(_.id).to(0l).set(_.name).toPending(100, TimeUnit.MILLISECONDS)
+    val b = instance[Named]().set(_.name).toPending(10, TimeUnit.SECONDS)
+
+    val bp = a evolve b
+    assert(bp.id === 0l)
+    assert(bp.opmTimestamp == a.opmTimestamp)
+    val caught1 = evaluating {
+      bp.name
+    } should produce[RuntimeException]
+    assert(caught1 match {
+      case PendingOpmValueException(message) => true
+      case e: NoSuchElementException => false
+    })
+    Thread.sleep(100)
+    val caught2 = evaluating {
+      bp.name
+    } should produce[RuntimeException]
+    assert(caught2 match {
+      case PendingOpmValueException(message) => false
+      case e: NoSuchElementException => true
+    })
+  }
+
+  test("evolve from pending trait sets pending when previous pending has expired") {
+    val a = instance[Foo]().set(_.id).to(0l).set(_.name).toPending(100, TimeUnit.MILLISECONDS)
+    val b = instance[Named]().set(_.name).toPending(10, TimeUnit.SECONDS)
+
+    val c = a evolve b
+    assert(c.id === 0l)
+    assert(c.opmTimestamp == a.opmTimestamp)
+    val caught1 = evaluating {
+      c.name
+    } should produce[RuntimeException]
+    assert(caught1 match {
+      case PendingOpmValueException(message) => true
+      case e: NoSuchElementException => false
+    })
+    Thread.sleep(100)
+    val caught2 = evaluating {
+      c.name
+    } should produce[RuntimeException]
+    assert(caught2 match {
+      case PendingOpmValueException(message) => false
+      case e: NoSuchElementException => true
+    })
+    val d = a evolve b
+    assert(d.opmTimestamp != a.opmTimestamp)
+    val caught3 = evaluating {
+      d.name
+    } should produce[RuntimeException]
+    assert(caught3 match {
+      case PendingOpmValueException(message) => true
+      case e: NoSuchElementException => false
+    })
+    val e = c evolve b
+    assert(e.opmTimestamp != c.opmTimestamp)
+    val caught4 = evaluating {
+      e.name
+    } should produce[RuntimeException]
+    assert(caught4 match {
+      case PendingOpmValueException(message) => true
+      case e: NoSuchElementException => false
+    })
+  }
 }

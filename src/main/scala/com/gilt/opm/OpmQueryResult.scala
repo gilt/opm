@@ -1,8 +1,6 @@
 package com.gilt.opm
 
 import query._
-import query.OpmPropertyBlank
-import query.OpmPropertyEquals
 
 /**
  * This class exposes the results of an OPM query. It can be chained to further refine the query.

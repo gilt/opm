@@ -3,6 +3,7 @@ package com.gilt.opm
 import java.lang.reflect.{Proxy, Method, InvocationHandler}
 import scala.collection.mutable
 import com.giltgroupe.util.time.MonotonicClock
+import com.gilt.opm.OpmFactory.OpmField
 
 object OpmIntrospection {
   val ClassField = "__c__"
@@ -19,7 +20,7 @@ trait OpmFactory {
   def clock(): Long
 
   import OpmIntrospection._
-  import OpmFactory.{introspectionMode, ModelExposeException, introspectionScratch, Scratch, recoverModel}
+  import OpmFactory.{introspectionMode, ModelExposeException, PendingOpmValueException, introspectionScratch, Scratch, recoverModel}
 
   /**
    * If you want to create an instance that gets persisted, you MUST give it a key when you create it.
@@ -30,7 +31,7 @@ trait OpmFactory {
    * @see OpmObject.opmIsComplete
    */
   def instance[T <: OpmObject : Manifest](key: String = UndefinedKey): T = {
-    newProxy(model = OpmProxy(key, Map(ClassField -> manifest.erasure, TimestampField -> clock())))
+    newProxy(model = OpmProxy(key, Map(ClassField -> OpmField(manifest.erasure), TimestampField -> OpmField(clock()))))
   }
 
   def instance[T <: OpmObject : Manifest](key: String, init: Map[String, Any]): T = {
@@ -39,13 +40,13 @@ trait OpmFactory {
     // no nulls allowed.
     val missing = missingFields(init, ignoreOption = true)
     require(missing.isEmpty, "Not all required field set: %s".format(missing.mkString(",")))
-    newProxy(model = OpmProxy(key, init ++ Map(ClassField -> manifest.erasure, TimestampField -> clock())))
+    newProxy(model = OpmProxy(key, init.map(kv => kv._1 -> OpmField(kv._2)) ++ Map(ClassField -> OpmField(manifest.erasure), TimestampField -> OpmField(clock()))))
   }
 
   implicit def toSetter[T <: OpmObject : Manifest](obj: T): RichOpmObject[T] = RichOpmObject(obj, this)
 
   private[opm] def instance[T <: OpmObject : Manifest](model: OpmProxy): T = {
-    newProxy(model.copy(fields = model.fields + (TimestampField -> clock())))
+    newProxy(model.copy(fields = model.fields + (TimestampField -> OpmField(clock()))))
   }
 
   // precompute field names of this object
@@ -106,7 +107,7 @@ trait OpmFactory {
             if (introspectionMode.get) {
               val stack = introspectionScratch.get()
               stack.push(Scratch(model, method.getName, clazz))
-              val resultOpt = model.fields.get(fieldName).map(_.asInstanceOf[AnyRef])
+              val resultOpt = model.fields.get(fieldName).map(_.value.asInstanceOf[AnyRef])
               if (resultOpt.isDefined) {
                 resultOpt.get
               } else {
@@ -123,7 +124,12 @@ trait OpmFactory {
                 }).asInstanceOf[AnyRef]
               }
             } else {
-              model.fields(fieldName).asInstanceOf[AnyRef]
+              model.fields(fieldName) match {
+                case OpmField(_, Some(pending)) if (pending > NanoTimestamp.now) => throw PendingOpmValueException("field '%s' on object is pending until %s".format(fieldName, pending))
+                case OpmField(value, Some(pending)) => throw new NoSuchElementException("key not found: %s".format(fieldName))
+                case OpmField(value, None) => value.asInstanceOf[AnyRef]
+                case other => other.asInstanceOf[AnyRef]
+              }
             }
           case unknown =>
             sys.error("Unknown method: %s".format(unknown))
@@ -138,9 +144,13 @@ object OpmFactory extends OpmFactory {
 
   def clock() = MonotonicClock.currentTimeNanos
 
+  private [opm] case class OpmField(value: Any, pending: Option[NanoTimestamp] = None)
+
   private [opm] case class Scratch(model: OpmProxy, field: String, clazz: Class[_])
 
   private [opm] case class ModelExposeException(model: OpmProxy) extends RuntimeException
+
+  private [opm] case class PendingOpmValueException(message: String) extends RuntimeException(message)
 
   private[opm] val introspectionMode = new ThreadLocal[Boolean] {
     override def initialValue() = false
@@ -174,11 +184,23 @@ object OpmFactory extends OpmFactory {
       ("We only support changing class to traits mixed into the class ( ... request additional leeway if you need it) " +
         "(this = %s, that = %s)").format(thisModel.clazz, thatModel.clazz))
     val allFields = (thisModel.fields.map(_._1).toSet ++ thatModel.fields.map(_._1)).filterNot(MetaFields)
-    val diffs = for (field <- allFields if (!isBuilder || thisModel.fields.get(field).isDefined)) yield {
+    val diffs = for (field <- allFields if (!isBuilder || thisModel.fields.contains(field))) yield {
       (thisModel.fields.get(field), thatModel.fields.get(field)) match {
         case (None, Some(any)) => Some(Diff(field, None))
         case (any@Some(_), None) => Some(Diff(field, any))
+        // If pending flag has expired, set to whatever is given
+        case (any, Some(OpmField(oldVal, Some(oldPending)))) if (oldPending < NanoTimestamp.now) => Some(Diff(field, any))
+        // If the value is an Option set to None, set to whatever is given
+        case (any, Some(OpmField(None, _))) => Some(Diff(field, any))
+        // If pending has been turned off and the value is missing, leave the value if already set
+        case (Some(OpmField(null, None)), Some(OpmField(any, None))) => None
+        // If pending has been turned off and the value is missing, simply remove the value for pending
+        case (Some(OpmField(null, None)), Some(any)) => Some(Diff(field, None))
+        // If the new value is pending, do not overwrite if something is already set (pending or not)
+        case (Some(OpmField(newVal, Some(newPending))), Some(_)) => None
+        // If the two values are different, set the new value; pending will not fall through to here
         case (value@Some(one), Some(another)) if one != another => Some(Diff(field, value))
+        // If the two values are the same, do nothing
         case (Some(_), Some(_)) => None
         case (None, None) => sys.error("It should not be possible for missing values in both objects")
       }
@@ -186,13 +208,13 @@ object OpmFactory extends OpmFactory {
     diffs.flatten.toSet
   }
 
-  private [opm] def evolve(fields: Map[String, Any], changes: Set[Diff]): Map[String, Any] = {
+  private [opm] def evolve(fields: Map[String, OpmField], changes: Set[Diff]): Map[String, OpmField] = {
 
     // a change can be a modification, addition, or removal
-    val changesByField: Map[String, Option[Any]] = changes.map(diff => diff.field -> diff.newValue).toMap
+    val changesByField: Map[String, Option[OpmField]] = changes.map(diff => diff.field -> diff.newValue).toMap
 
     // fields which were either modified or added, we don't care which
-    val newOrChangedFields: Map[String, Any] = changesByField.flatMap {
+    val newOrChangedFields: Map[String, OpmField] = changesByField.flatMap {
       field =>
         changesByField(field._1) match {
           case None => None
@@ -204,7 +226,7 @@ object OpmFactory extends OpmFactory {
     val touchedFields: Set[String] = changesByField.keySet
 
     // fields which were not modified or deleted
-    val untouched: Map[String, Any] = fields.filterNot(f => touchedFields.contains(f._1))
+    val untouched: Map[String, OpmField] = fields.filterNot(f => touchedFields.contains(f._1))
 
     // new or modified fields ++ unmodified fields (so deleted fields get removed here)
     newOrChangedFields ++ untouched

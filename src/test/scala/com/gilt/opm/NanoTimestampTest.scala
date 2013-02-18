@@ -34,8 +34,27 @@ class NanoTimestampTest extends FunSuite {
     val ts3 = new NanoTimestamp(ts1.time + 2)
     assert(ts1.compareTo(ts2) == -1)
     assert(ts3.compareTo(ts2) == 1)
+    assert(ts1 < ts2)
+    assert(ts1 <= ts2)
+    assert(ts1 <= ts1)
+    assert(ts2 > ts1)
+    assert(ts2 >= ts1)
+    assert(ts2 >= ts2)
   }
 
+  test("add to timestamp") {
+    val ts1 = new NanoTimestamp()
+    val ts2 = new NanoTimestamp(ts1.time + 1)
+    val ts3 = ts1 + 1
+    assert(ts2 == ts3)
+  }
+
+  test("subtract from timestamp") {
+    val ts1 = new NanoTimestamp()
+    val ts2 = new NanoTimestamp(ts1.time - 1)
+    val ts3 = ts1 - 1
+    assert(ts2 == ts3)
+  }
   test("create from Gilt timestamp") {
     val ts1 = new Timestamp()
     val ts2 = new NanoTimestamp(ts1)

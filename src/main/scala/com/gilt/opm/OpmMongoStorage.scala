@@ -9,6 +9,7 @@ import java.util.{ConcurrentModificationException, UUID, Date}
 import lock.LockManager
 import org.bson.types.BasicBSONList
 import query.{OpmSearcherHelper, OpmPropertyGreaterThanOrEqual, OpmPropertyLessThanOrEqual, OpmPropertyQuery, OpmSearcher}
+import com.gilt.opm.OpmFactory.OpmField
 
 /**
  * Mixing to provide mongo storage for OpmObjects.
@@ -42,7 +43,7 @@ trait OpmMongoStorage[V <: OpmObject] extends OpmStorage[V] with LockManager {
     case (f, _, d) if d.isInstanceOf[Date] => d
     case (f, _, u) if u.isInstanceOf[UUID] => u
     case (f, _, n) if n == None => None
-    case (f, optFieldClass, some) if some.isInstanceOf[Some[_]] => Some(mapToMongo(f, optFieldClass, some.asInstanceOf[Option[AnyRef]].get))
+    case (f, optFieldClass, some) if some.isInstanceOf[Some[_]] => Some(mapToMongo(f, optFieldClass, OpmField(some.asInstanceOf[Option[AnyRef]].get)))
     case (f, optFieldClass, iter) if iter.isInstanceOf[Iterable[_]] => {
       val b = MongoDBList.newBuilder
       // So that we can work around type-erasure for nested collections, as we write a collection,
@@ -57,13 +58,13 @@ trait OpmMongoStorage[V <: OpmObject] extends OpmStorage[V] with LockManager {
       if (!anIter.isEmpty && optFieldClass.isEmpty) {
         b += MongoDBObject("_t_" -> collectionCname(anIter))
       }
-      iter.asInstanceOf[Iterable[_]].foreach(item => b += mapToMongo(f, None, item))
+      iter.asInstanceOf[Iterable[_]].foreach(item => b += mapToMongo(f, None, OpmField(item)))
       b.result()
     }
     case (f, optFieldClass, tuple) if tuple.isInstanceOf[Tuple2[_, _]] => {
       // tuples get encoded as lists-of-2. This is needed for properly encoding a Map.
       val t = tuple.asInstanceOf[Tuple2[_, _]]
-      (mapToMongo(f, None, t._1), mapToMongo(f, None, t._2))
+      (mapToMongo(f, None, OpmField(t._1)), mapToMongo(f, None, OpmField(t._2)))
     }
     case (f, _, o) if o.isInstanceOf[OpmObject] =>
       val proxy = OpmFactory.recoverModel(o.asInstanceOf[OpmObject])
@@ -134,7 +135,7 @@ trait OpmMongoStorage[V <: OpmObject] extends OpmStorage[V] with LockManager {
       } getOrElse {
         (None, loadedSeq)
       }
-      cts._2.map(mapFromMongo(field, None, _)) match {
+      cts._2.map(mapFromMongo(field, None, _).value) match {
           // here we deal with container types we can can infer the collection type from the OpmObject method signature
         case aSet if fieldClassOpt == Some(classOf[Set[_]]) => aSet.toSet
         case aMap if fieldClassOpt == Some(classOf[Map[_, _]]) => mongoListToMap(aMap)
@@ -178,19 +179,21 @@ trait OpmMongoStorage[V <: OpmObject] extends OpmStorage[V] with LockManager {
   // about the types in the database itself -- we can derive it from the class.  If it's None, then we can't,
   // so the runtime needs to write some metadata about things like container types so that, for example, nested
   // collections can be recovered from mongo.
-  private [this] def mapToMongo(field: String, fieldType: Option[Class[_]], value: Any): Any = {
+  private [this] def mapToMongo(field: String, fieldType: Option[Class[_]], value: OpmField): Any = {
     value match {
-      case ref: AnyRef =>
-        (toMongoMapper.map(_ orElse defaultToMongoMapper orElse identity).getOrElse(defaultToMongoMapper orElse identity))(field, fieldType, ref)
-      case anyVal =>
+      case OpmField(_, Some(pending)) => MongoDBObject(Pending -> pending.time)
+      case OpmField(ref: AnyRef, None) =>
+        (toMongoMapper.map(_ orElse defaultToMongoMapper orElse identity).getOrElse(defaultToMongoMapper orElse identity))((field, fieldType, ref))
+      case OpmField(anyVal, None) =>
         anyVal
     }
   }
 
-  private [this] def mapFromMongo(field: String, fieldType: Option[Class[_]], value: Any): Any = {
+  private [this] def mapFromMongo(field: String, fieldType: Option[Class[_]], value: Any): OpmField = {
     val isOption = fieldType.isDefined && fieldType.get.isAssignableFrom(classOf[Option[_]])
 
-    Option(value).map { _ =>
+    if (value.isInstanceOf[DBObject] && !value.isInstanceOf[BasicBSONList] && wrapDBObj(value.asInstanceOf[DBObject]).contains(Pending)) OpmField(null, Some(NanoTimestamp(wrapDBObj(value.asInstanceOf[DBObject]).get(Pending).get.asInstanceOf[Long])))
+    else OpmField(Option(value).map { _ =>
       val result = fromMongoMapper.map(_ orElse defaultFromMongoMapper orElse identity).getOrElse(defaultFromMongoMapper orElse identity)(field, fieldType, value.asInstanceOf[AnyRef])
       Option(result).map { _ =>
         if (isOption)  Some(result) else result
@@ -199,7 +202,7 @@ trait OpmMongoStorage[V <: OpmObject] extends OpmStorage[V] with LockManager {
       }
     }.getOrElse {
       if (isOption) None else null
-    }
+    })
   }
 
   private [this] val sortFields = MongoDBObject(Timestamp -> -1, Type -> 1)
@@ -464,8 +467,8 @@ trait OpmMongoStorage[V <: OpmObject] extends OpmStorage[V] with LockManager {
     opmProxy(key, clazz, timeStamp, fields.map(kv => kv._1 -> mapFromMongo(kv._1, Some(clazz.getMethod(kv._1).getReturnType), kv._2)))
   }
 
-  private [this] def opmProxy(key: String, clazz: Class[_], timeStamp: Long, fields: Map[String, Any]) = {
-    OpmProxy(key, fields ++ Map(ClassField -> clazz, TimestampField -> timeStamp))
+  private [this] def opmProxy(key: String, clazz: Class[_], timeStamp: Long, fields: Map[String, OpmField]) = {
+    OpmProxy(key, fields ++ Map(ClassField -> OpmField(clazz), TimestampField -> OpmField(timeStamp)))
   }
 
   // given a sequence of phase=0 waves, writes them to the database
@@ -539,8 +542,8 @@ trait OpmMongoStorage[V <: OpmObject] extends OpmStorage[V] with LockManager {
     }
     builder += Key -> key
     builder += Type -> ValueType
-    builder += Timestamp -> fields(TimestampField)
-    builder += Classname -> fields(ClassField).asInstanceOf[Class[_]].getName
+    builder += Timestamp -> fields(TimestampField).value
+    builder += Classname -> fields(ClassField).value.asInstanceOf[Class[_]].getName
     builder += Instance -> fields.filterNot(f => MetaFields(f._1)).foldLeft(MongoDBObject.newBuilder) {
       case (b, f) =>
         b += f._1 -> mapToMongo(f._1, Some(obj.fieldMethod(f._1).getReturnType), f._2)
@@ -558,6 +561,7 @@ object OpmMongoStorage {
   val Classname = "c"
   val Instance = "i"
   val Forward = "f"
+  val Pending = "pnd"
   val Reverse = "r"
   val Type = "t"
 

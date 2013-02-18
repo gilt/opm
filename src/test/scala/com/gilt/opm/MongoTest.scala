@@ -1,8 +1,10 @@
 package com.gilt.opm
 
 import org.scalatest.FunSuite
-import com.mongodb.casbah.MongoConnection
 import java.util.{UUID, Date}
+import java.util.concurrent.TimeUnit
+import scala.NoSuchElementException
+import org.scalatest.matchers.ShouldMatchers
 
 /**
  * Document Me.
@@ -44,7 +46,7 @@ object MongoTest {
   }
 }
 
-class MongoTest extends FunSuite with OpmMongoStorage[MongoTest.TestDomain] with CollectionHelper {
+class MongoTest extends FunSuite with OpmMongoStorage[MongoTest.TestDomain] with CollectionHelper with ShouldMatchers {
   import MongoTest._
   import OpmFactory._
   override val collectionName = "opm"
@@ -735,6 +737,50 @@ class MongoTest extends FunSuite with OpmMongoStorage[MongoTest.TestDomain] with
     assert(d5.map(_.id) === Some(1))
     assert(d5.map(_.name) === Some("name1"))
     assert(d5.get.timeline.size === 2)
+  }
+
+  test("pending persists to Mongo") {
+    val key = uniqueKey
+    val obj1 = instance[TestDomain](key).
+      set(_.id).to(1).
+      set(_.name).toPending(100, TimeUnit.MILLISECONDS)
+    put(obj1)
+    val obj2 = get(key).get
+    val caught1 = evaluating {
+      obj2.name
+    } should produce[RuntimeException]
+    assert(caught1 match {
+      case PendingOpmValueException(message) => true
+      case e: NoSuchElementException => false
+    })
+    Thread.sleep(101)
+    val caught2 = evaluating {
+      obj2.name
+    } should produce[RuntimeException]
+    assert(caught2 match {
+      case PendingOpmValueException(message) => false
+      case e: NoSuchElementException => true
+    })
+  }
+
+  test("set value after pending persists to Mongo") {
+    val key = uniqueKey
+    val obj1 = instance[TestDomain](key).
+      set(_.id).to(1).
+      set(_.name).toPending(100, TimeUnit.MILLISECONDS)
+    put(obj1)
+    val obj2 = get(key).get
+    val caught1 = evaluating {
+      obj2.name
+    } should produce[RuntimeException]
+    assert(caught1 match {
+      case PendingOpmValueException(message) => true
+      case e: NoSuchElementException => false
+    })
+    val obj3 = obj2.set(_.name).to("name1")
+    squashPut(obj3)
+    val obj4 = get(key).get
+    assert(obj4.name === "name1")
   }
 
   def assertOpmObjectAccessorFails(f: () => Any) {
