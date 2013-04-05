@@ -5,7 +5,7 @@ import java.util.{UUID, Date}
 import java.util.concurrent.TimeUnit
 import scala.NoSuchElementException
 import org.scalatest.matchers.ShouldMatchers
-import com.giltgroupe.util.CompactGuid
+import com.giltgroupe.util.{GUID, CompactGuid}
 
 /**
  * Document Me.
@@ -54,6 +54,35 @@ object MongoTest {
   object TestClass extends OpmMongoStorage[TestClass] with CollectionHelper {
     override val collectionName = "opm_test_class"
   }
+
+  trait NamedAudited extends OpmAuditedObject[GUID] {
+    def name: String
+  }
+
+  trait TestClassAudited extends NamedAudited {
+    def id: Long
+  }
+
+  object TestClassAudited extends OpmAuditedMongoStorage[TestClassAudited, GUID] with CollectionHelper {
+    override val collectionName = "opm_test_class"
+
+    override def toMongoMapper: Option[PartialFunction[(String, Option[Class[_]], AnyRef), AnyRef]] = {
+      Some {
+        {
+          case (OpmIntrospection.UpdatedByField, _, Some(guid)) => guid.toString
+        }
+      }
+    }
+
+    override def fromMongoMapper: Option[PartialFunction[(String, Option[Class[_]], AnyRef), AnyRef]] = {
+      Some {
+        {
+          case (OpmIntrospection.UpdatedByField, _, str) => new GUID(str.toString)
+        }
+      }
+    }
+  }
+
 }
 
 class MongoTest extends FunSuite with OpmMongoStorage[MongoTest.TestDomain] with CollectionHelper with ShouldMatchers {
@@ -1051,7 +1080,7 @@ class MongoTest extends FunSuite with OpmMongoStorage[MongoTest.TestDomain] with
     put(obj1)
 
     // Straight put, without a prune
-    val obj2 = toSetter(get(key).get)
+    val obj2 = get(key).get
     assert(obj2.timeline.size == 3)
     // One step back, both are set
     assert(obj2.timeline.head.id == 1)
@@ -1069,7 +1098,7 @@ class MongoTest extends FunSuite with OpmMongoStorage[MongoTest.TestDomain] with
     squashPut(obj3)
 
     // With a squashed put
-    val obj4 = toSetter(get(key).get)
+    val obj4 = get(key).get
     assert(obj4.timeline.size == 4)
     // One step back, both are set in the same diff
     assert(obj4.timeline.head.id == 2)
@@ -1206,6 +1235,108 @@ class MongoTest extends FunSuite with OpmMongoStorage[MongoTest.TestDomain] with
     assert(d5.map(_.id) === Some(1))
     assert(d5.map(_.name) === Some("name1"))
     assert(d5.get.timeline.size === 2)
+  }
+
+  test("can audit changes") {
+    import MongoTest.TestClassAudited
+    val guid1 = GUID.randomGUID()
+    val guid2 = GUID.randomGUID()
+    val d1 =
+      OpmFactory.instance[TestClassAudited]("test_class_audited_1").
+        set(_.id).to(1).by(guid1, "testing1")
+
+    TestClassAudited.put(d1)
+
+    val d2 = TestClassAudited.get("test_class_audited_1").get.
+      set(_.name).to("name1").
+      set(_.id).to(2).by(guid2, "testing2")
+
+    TestClassAudited.put(d2)
+
+    val d3 = TestClassAudited.get("test_class_audited_1")
+    assert(d3.map(_.id) === Some(2))
+    assert(d3.map(_.name) === Some("name1"))
+    assert(d3.get.timeline.size === 4)
+    assert(d3.get.opmUpdatedBy === Some(guid2))
+    assert(d3.get.opmUpdateReason === Some("testing2"))
+    assert(d3.get.timeline.tail.head.opmUpdatedBy === None)
+    assert(d3.get.timeline.tail.head.opmUpdateReason === None)
+    assert(d3.get.timeline.tail.tail.head.opmUpdatedBy === Some(guid1))
+    assert(d3.get.timeline.tail.tail.head.opmUpdateReason === Some("testing1"))
+  }
+
+  test("can audit changes with evolve") {
+    import MongoTest.TestClassAudited
+    val guid1 = GUID.randomGUID()
+    val guid2 = GUID.randomGUID()
+    val d1 =
+      OpmFactory.instance[TestClassAudited]("test_class_audited_2").
+        set(_.id).to(1).by(guid1, "testing1")
+
+    TestClassAudited.put(d1)
+
+    val d2 =
+      OpmFactory.instance[NamedAudited]().
+        set(_.name).to("name1").by(guid2, "testing2")
+
+    val d3 = TestClassAudited.get("test_class_audited_2")
+    assert(d3.map(_.id) === Some(1))
+
+    val d4 = d3.get evolve d2
+
+    TestClassAudited.put(d4)
+
+    val d5 = TestClassAudited.get("test_class_audited_2")
+    assert(d5.map(_.id) === Some(1))
+    assert(d5.map(_.name) === Some("name1"))
+    assert(d5.get.timeline.size === 3)
+    assert(d5.get.opmUpdatedBy === Some(guid2))
+    assert(d5.get.opmUpdateReason === Some("testing2"))
+    assert(d5.get.timeline.tail.head.opmUpdatedBy === Some(guid1))
+    assert(d5.get.timeline.tail.head.opmUpdateReason === Some("testing1"))
+  }
+
+  test("can audit squashPut") {
+    import MongoTest.TestClassAudited
+    val guid1 = GUID.randomGUID()
+    val guid2 = GUID.randomGUID()
+    val guid3 = GUID.randomGUID()
+    val guid4 = GUID.randomGUID()
+    val d1 =
+      OpmFactory.instance[TestClassAudited]("test_class_audited_3").
+        set(_.id).to(1).by(guid1, "testing1").
+        set(_.name).to("name1").by(guid2, "testing2")
+
+    TestClassAudited.squashPut(d1, guid3, "testing3")
+
+    val d2 =
+      OpmFactory.instance[TestClassAudited]("test_class_audited_3").
+        set(_.id).to(2).by(guid1, "testing1").
+        set(_.name).to("name2").by(guid2, "testing2")
+
+    TestClassAudited.squashPut(d2)
+
+    val d3 =
+      OpmFactory.instance[TestClassAudited]("test_class_audited_3").
+        set(_.id).to(3).by(guid1, "testing1").
+        set(_.name).to("name3").by(guid2, "testing2")
+
+    TestClassAudited.squashPut(d3, guid4, "testing4")
+
+    val d4 = TestClassAudited.get("test_class_audited_3")
+    assert(d4.map(_.id) === Some(3))
+    assert(d4.map(_.name) === Some("name3"))
+    assert(d4.get.timeline.size === 4)
+    assert(d4.get.opmUpdatedBy === Some(guid4))
+    assert(d4.get.opmUpdateReason === Some("testing4"))
+    assert(d4.get.timeline.tail.head.id === 2)
+    assert(d4.get.timeline.tail.head.name === "name2")
+    assert(d4.get.timeline.tail.head.opmUpdatedBy === Some(guid2))
+    assert(d4.get.timeline.tail.head.opmUpdateReason === Some("testing2"))
+    assert(d4.get.timeline.tail.tail.head.id === 1)
+    assert(d4.get.timeline.tail.tail.head.name === "name1")
+    assert(d4.get.timeline.tail.tail.head.opmUpdatedBy === Some(guid3))
+    assert(d4.get.timeline.tail.tail.head.opmUpdateReason === Some("testing3"))
   }
 
   test("pending persists to Mongo") {

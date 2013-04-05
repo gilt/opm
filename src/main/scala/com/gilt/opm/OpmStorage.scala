@@ -1,7 +1,6 @@
 package com.gilt.opm
 
-import OpmFactory.toSetter
-import query.{OpmSearcherHelper, OpmSearcher, OpmPropertyQuery}
+import query.OpmSearcherHelper
 
 /**
  * Document Me.
@@ -67,6 +66,17 @@ trait OpmStorage[V <: OpmObject] {
    */
   def squashPut(obj: V)(implicit mf: Manifest[V]) {
     val toPut = get(obj.opmKey).map(obj.forceAfter(_)).getOrElse(obj.prune)
+    put(toPut)
+  }
+}
+
+trait OpmAuditedStorage[T <: OpmAuditedObject[U], U] extends OpmStorage[T] {
+  /**
+   * A squashPut option with updater fields. This is necessary because the default squashPut will use only the updater
+   * information from the final diff.
+   */
+  def squashPut(obj: T, updatedBy: U, updateReason: String)(implicit mf: Manifest[T]) {
+    val toPut = get(obj.opmKey).map(obj.forceAfter(_)).getOrElse(obj.prune).by(updatedBy, updateReason)
     put(toPut)
   }
 }

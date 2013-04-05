@@ -172,7 +172,7 @@ trait OpmMongoStorage[V <: OpmObject] extends OpmStorage[V] with LockManager {
       }
       loadedOpt.map {
         opm =>
-          val richOpm = toSetter(opm.asInstanceOf[OpmObject])(Manifest.classType(clazz))
+          val richOpm = OpmObject.toSetter(opm.asInstanceOf[OpmObject])(Manifest.classType(clazz))
           richOpm.timeline.find(_.opmTimestamp == timestamp).getOrElse {
               sys.error("Could not load an object(%s, %s) with opmTimestamp %s".format(className, key, timestamp))
           }
@@ -484,7 +484,7 @@ trait OpmMongoStorage[V <: OpmObject] extends OpmStorage[V] with LockManager {
 
     val diffIterable = wrapDBObj(obj.as[DBObject](direction)).map {case (key, value) =>
       val valueType = if (OpmIntrospection.MetaFields.contains(key)) None
-      else Some(clazz.getMethod(key).getReturnType)
+      else Some(OpmProxy.fieldType(key, clazz))
 
       value match {
         /* Unfortunately, a mapping from key to null can mean one of several things:
@@ -519,7 +519,7 @@ trait OpmMongoStorage[V <: OpmObject] extends OpmStorage[V] with LockManager {
     val record = wrapDBObj(valueRecord)
     val clazz = Class.forName(record.as[String](Classname))
     val timeStamp = record.as[Long](Timestamp)
-    opmProxy(key, clazz, timeStamp, fields.map(kv => kv._1 -> mapFromMongo(kv._1, Some(clazz.getMethod(kv._1).getReturnType), kv._2)))
+    opmProxy(key, clazz, timeStamp, fields.map(kv => kv._1 -> mapFromMongo(kv._1, Some(OpmProxy.fieldType(kv._1, clazz)), kv._2)))
   }
 
   private [this] def opmProxy(key: String, clazz: Class[_], timeStamp: Long, fields: Map[String, OpmField]) = {
@@ -573,14 +573,14 @@ trait OpmMongoStorage[V <: OpmObject] extends OpmStorage[V] with LockManager {
     forwardDiffBuilder += (TimestampField -> later.timestamp)
     builder += Forward -> forwardDiffs.foldLeft(forwardDiffBuilder) {
       case (b, Diff(field, newValueType)) =>
-        b += field -> newValueType.map(mapToMongo(field, Some(later.fieldMethod(field).getReturnType), _))
+        b += field -> newValueType.map(mapToMongo(field, Some(later.fieldType(field)), _))
         b
     }.result()
     val reverseDiffBuilder = MongoDBObject.newBuilder
     reverseDiffBuilder += (TimestampField -> earlier.timestamp)
     builder += Reverse -> reverseDiffs.foldLeft(reverseDiffBuilder) {
       case (b, Diff(field, newValueType)) =>
-        b += field -> newValueType.map(mapToMongo(field, Some(later.fieldMethod(field).getReturnType), _))
+        b += field -> newValueType.map(mapToMongo(field, Some(later.fieldType(field)), _))
         b
     }.result()
     collection.save(builder.result())
@@ -601,7 +601,7 @@ trait OpmMongoStorage[V <: OpmObject] extends OpmStorage[V] with LockManager {
     builder += Classname -> fields(ClassField).value.asInstanceOf[Class[_]].getName
     builder += Instance -> fields.filterNot(f => MetaFields(f._1)).foldLeft(MongoDBObject.newBuilder) {
       case (b, f) =>
-        b += f._1 -> mapToMongo(f._1, Some(obj.fieldMethod(f._1).getReturnType), f._2)
+        b += f._1 -> mapToMongo(f._1, Some(obj.fieldType(f._1)), f._2)
         b
     }.result
     collection.save(builder.result())
@@ -630,3 +630,5 @@ object OpmMongoStorage {
   val ValueType = "v"
   val DiffType = "d"
 }
+
+trait OpmAuditedMongoStorage[T <: OpmAuditedObject[U], U] extends OpmMongoStorage[T] with OpmAuditedStorage[T,U]

@@ -24,3 +24,19 @@ trait OpmObject {
   final def opmIsBuilder: Boolean = false
 }
 
+object OpmObject {
+  implicit def toSetter[T <: OpmObject : Manifest](obj: T): RichOpmObject[T] = RichOpmObject(obj)
+}
+
+/**
+ * Extend this trait when you want to include auditing of updatedBy and updateReason.
+ */
+trait OpmAuditedObject[U] extends OpmObject {
+  final def opmUpdatedBy: Option[U] = None
+
+  final def opmUpdateReason: Option[String] = None
+}
+
+object OpmAuditedObject {
+  implicit def toSetter[T <: OpmAuditedObject[U] : Manifest, U](obj: T with OpmAuditedObject[U]): RichOpmAuditObject[T, U] = RichOpmAuditObject(obj)
+}

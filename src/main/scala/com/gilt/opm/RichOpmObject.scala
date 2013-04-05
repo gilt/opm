@@ -16,7 +16,7 @@ case class Diff(field: String, newValue: Option[OpmField])
  * A note to people who expand functionality here: dealing with new values happens both here (in RichOpmObject) and in
  * OpmFactory.diffModels (for evolving an existing model with an overlaid model). Make sure you make updates to both.
  */
-case class RichOpmObjectSetter[T <: OpmObject, V](roo: RichOpmObject[T]) {
+case class RichOpmObjectSetter[T <: OpmObject, V](roo: RichOpmObjectInitializer[T]) {
   def to(v: V): T = {
     roo.to(v)
   }
@@ -57,12 +57,14 @@ case class RichOpmObjectSetter[T <: OpmObject, V](roo: RichOpmObject[T]) {
   def ::=(v: V): T = this.pruneTo(v)
 }
 
-case class RichOpmObject[T <: OpmObject : Manifest](obj: T, factory: OpmFactory) {
+abstract class RichOpmObjectInitializer[T <: OpmObject : Manifest] {
+  def obj: T
 
   import OpmFactory._
+  import OpmIntrospection._
 
-  private var stack: mutable.Stack[Scratch] = _
-  private lazy val model = recoverModel(obj)
+  protected var stack: mutable.Stack[Scratch] = _
+  protected lazy val model = recoverModel(obj)
 
   def set[V](v: T => V): RichOpmObjectSetter[T, V] = {
     try {
@@ -107,7 +109,7 @@ case class RichOpmObject[T <: OpmObject : Manifest](obj: T, factory: OpmFactory)
       // we may need to wrap this value in Some if the method return
       // type says to. Unfortunately containers are a pain with type erasure
       if (value != None && !value.asInstanceOf[AnyRef].getClass.isAssignableFrom(classOf[Some[_]]) &&
-        scratch.model.fieldMethod(scratch.field).getReturnType.isAssignableFrom(classOf[Option[_]])) {
+        scratch.model.fieldType(scratch.field).isAssignableFrom(classOf[Option[_]])) {
         OpmField(Option(value))
       } else {
         OpmField(value)
@@ -116,9 +118,9 @@ case class RichOpmObject[T <: OpmObject : Manifest](obj: T, factory: OpmFactory)
 
     @tailrec
     def populate(scratch: Scratch, value: Any): AnyRef = {
-      val newFields = scratch.model.fields + (scratch.field -> wrap(scratch, value))
+      val newFields = updateFields(scratch, wrap(scratch, value))
       val newModel = scratch.model.copy(fields = newFields, history = scratch.model #:: scratch.model.history)
-      val newInstance = factory.instance(newModel)(new Manifest[OpmObject] {
+      val newInstance = OpmFactory.instance(newModel)(new Manifest[OpmObject] {
         override val erasure = scratch.clazz
       })
       if (stack.isEmpty) {
@@ -138,9 +140,9 @@ case class RichOpmObject[T <: OpmObject : Manifest](obj: T, factory: OpmFactory)
     def populate(scratch: Scratch, value: Any, expireAt: Option[NanoTimestamp]): AnyRef = {
       if (scratch.model.fields.get(scratch.field).map(f => f.pending.forall(_ > NanoTimestamp.now) && (f.value != None)).getOrElse(false)) newProxy(scratch.model) // No change if already set to non-None
       else {
-        val newFields = scratch.model.fields + (scratch.field -> OpmField(null, expireAt))
+        val newFields = updateFields(scratch, OpmField(null, expireAt))
         val newModel = scratch.model.copy(fields = newFields, history = scratch.model #:: scratch.model.history)
-        val newInstance = factory.instance(newModel)(new Manifest[OpmObject] {
+        val newInstance = OpmFactory.instance(newModel)(new Manifest[OpmObject] {
           override val erasure = scratch.clazz
         })
         if (stack.isEmpty) {
@@ -161,9 +163,9 @@ case class RichOpmObject[T <: OpmObject : Manifest](obj: T, factory: OpmFactory)
     def populate(scratch: Scratch, value: Any): AnyRef = {
       if (scratch.model.fields.get(scratch.field).map(!_.pending.isDefined).getOrElse(false)) newProxy(scratch.model) // No change if not pending
       else {
-        val newFields = scratch.model.fields + (scratch.field -> OpmField(null, None))
+        val newFields = updateFields(scratch, OpmField(null, None))
         val newModel = scratch.model.copy(fields = newFields, history = scratch.model #:: scratch.model.history)
-        val newInstance = factory.instance(newModel)(new Manifest[OpmObject] {
+        val newInstance = OpmFactory.instance(newModel)(new Manifest[OpmObject] {
           override val erasure = scratch.clazz
         })
         if (stack.isEmpty) {
@@ -178,35 +180,33 @@ case class RichOpmObject[T <: OpmObject : Manifest](obj: T, factory: OpmFactory)
 
   private [opm] def :=[V](v: V): T = this.to(v)
 
-  private [opm] def pruneTo[V](v: V): T = {
-    new RichOpmObject[T](to(v), factory).prune
-  }
+  private [opm] def pruneTo[V](v: V): T
 
   private [opm] def ::=[V](v: V): T = this.pruneTo(v)
 
   def prune: T = {
-    factory.instance(model.copy(history = Stream.empty))
+    OpmFactory.instance(model.copy(history = Stream.empty))
   }
 
-  def forceAfter(currentHead: RichOpmObject[T]): T = {
+  def forceAfter(currentHead: RichOpmObjectInitializer[T]): T = {
     instance(model.copy(history = currentHead.model #:: currentHead.model.history))
   }
 
-  def ::(currentHead: RichOpmObject[T]): T = forceAfter(currentHead)
+  def ::(currentHead: RichOpmObjectInitializer[T]): T = forceAfter(currentHead)
 
   // this object and its history
   def timeline: Stream[T] = {
-    obj #:: model.history.view.map(factory.newProxy(_)).toStream
+    obj #:: model.history.view.map(OpmFactory.newProxy(_)).toStream
   }
 
   // a diff b returns the set of changes such that
   // b evolve (a diff b) == a
   // (so, the set of changes to transform that into this)
-  def diff(that: RichOpmObject[_]): Set[Diff] = {
+  def diff(that: RichOpmObjectInitializer[_]): Set[Diff] = {
     diffModels(model, that.model, this.obj.opmIsBuilder)
   }
 
-  def -:-(that: RichOpmObject[T]): Set[Diff] = this.diff(that)
+  def -:-(that: RichOpmObjectInitializer[T]): Set[Diff] = this.diff(that)
 
   def evolve(changes: Set[Diff]): T = {
     if (changes.size == 0) newProxy(model)
@@ -214,6 +214,59 @@ case class RichOpmObject[T <: OpmObject : Manifest](obj: T, factory: OpmFactory)
       history = model #:: model.history))
   }
 
-  def evolve(that: RichOpmObject[_]): T = evolve(that.diff(this))
+  def evolve(that: RichOpmObjectInitializer[_]): T = evolve(that.diff(this))
+
+  /**
+   * Force clearing of the audit properties, to avoid confusion when auditing. If these fields aren't cleared every
+   * time, when the end user chooses to NOT set these fields, the values from the previous diff will persist, so it
+   * will appear as though that updater made the updates - which may or may not be the case.
+   */
+  private def updateFields(scratch: Scratch, newField: OpmField) = {
+    scratch.model.fields -
+      UpdatedByField -
+      UpdateReasonField +
+      (scratch.field -> newField)
+  }
 }
 
+case class RichOpmObject[T <: OpmObject : Manifest](obj: T) extends RichOpmObjectInitializer[T] {
+  private [opm] def pruneTo[V](v: V): T = {
+    new RichOpmObject[T](to(v)).prune
+  }
+}
+
+case class RichOpmAuditObject[T <: OpmAuditedObject[U] : Manifest, U](obj: T) extends RichOpmObjectInitializer[T] {
+  import OpmFactory._
+  import OpmIntrospection.{UpdatedByField, UpdateReasonField}
+
+  private [opm] def pruneTo[V](v: V): T = {
+    new RichOpmAuditObject[T, U](to(v)).prune
+  }
+
+  /**
+    * To keep track of who made a particular change, and why. This is useful when looking at the history of changes.
+    * It will get attached to the current diff, and exposed as opmUpdatedBy and opmUpdateReason. Example usage:
+    *
+    *   obj.set(_.name).to("My Name").by("00000000-0000-0000-0000-000000000000", "updated from service x")
+    *
+    *   or
+    *
+    *   obj.
+    *     set(_.name).to("My Name").
+    *     set(_.description).to("My desc").
+    *     set(_.time).to(new DateTime()).
+    *     prune.
+    *     by("00000000-0000-0000-0000-000000000000", "updated from service x")
+    *
+    * @param updatedBy A guid-type identifier of the person/application responsible for the change.
+    * @param updateReason A readable reason why/how the change occurred.
+    */
+  def by(updatedBy: U, updateReason: String): T = {
+    val model = recoverModel(obj)
+    val newFields = model.fields + (UpdatedByField -> OpmField(Option(updatedBy)), UpdateReasonField -> OpmField(Option(updateReason)))
+    val newModel = model.copy(fields = newFields) // Don't move history forward, because this should be attached to the current change.
+    OpmFactory.instance(newModel)(new Manifest[OpmAuditedObject[U]] {
+      override val erasure = manifest[T].erasure
+    }).asInstanceOf[T]
+  }
+}

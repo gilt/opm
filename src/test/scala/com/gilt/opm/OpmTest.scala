@@ -49,17 +49,12 @@ object OpmTest {
   }
 }
 
-class OpmTest extends FunSuite with ShouldMatchers with OpmFactory {
+class OpmTest extends FunSuite with ShouldMatchers {
 
   import OpmTest.{Foo, Bar, SubFoo, MixOfOptionalNonOptional, MixOfOptionalNonOptionalWithMethod, Named}
+  import OpmFactory._
 
   var time = 0l
-
-  override def clock() = {
-    val tmp = time
-    time += 1
-    tmp
-  }
 
   test("basics") {
     val foo = instance[Foo]("")
@@ -102,9 +97,10 @@ class OpmTest extends FunSuite with ShouldMatchers with OpmFactory {
   }
 
   test("timestamp") {
-    val before = clock()
+    val before = OpmFactory.clock()
     val a = instance[Foo]("").set(_.name) := "a"
-    assert(a.opmTimestamp === before + 2)
+    val after = OpmFactory.clock()
+    assert(a.opmTimestamp >= before && a.opmTimestamp <= after)
   }
 
   test("branching") {

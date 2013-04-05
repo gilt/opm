@@ -10,7 +10,13 @@ object OpmIntrospection {
 
   val TimestampField = "__t__"
 
+  val UpdatedByField = "__u__"
+
+  val UpdateReasonField = "__r__"
+
   val MetaFields = Set(ClassField, TimestampField)
+
+  val InternalFields = MetaFields ++ mutable.Set(UpdatedByField, UpdateReasonField)
 
   val UndefinedKey = "__undefined"
 }
@@ -42,8 +48,6 @@ trait OpmFactory {
     require(missing.isEmpty, "Not all required field set: %s".format(missing.mkString(",")))
     newProxy(model = OpmProxy(key, init.map(kv => kv._1 -> OpmField(kv._2)) ++ Map(ClassField -> OpmField(manifest.erasure), TimestampField -> OpmField(clock()))))
   }
-
-  implicit def toSetter[T <: OpmObject : Manifest](obj: T): RichOpmObject[T] = RichOpmObject(obj, this)
 
   private[opm] def instance[T <: OpmObject : Manifest](model: OpmProxy): T = {
     newProxy(model.copy(fields = model.fields + (TimestampField -> OpmField(clock()))))
@@ -103,6 +107,18 @@ trait OpmFactory {
             java.lang.Boolean.valueOf(missingFields(model.fields, ignoreOption = false)(model.manifest).isEmpty)
           case "opmIsBuilder" =>
             (model.key == UndefinedKey).asInstanceOf[AnyRef]
+          case "opmUpdatedBy" =>
+            if (introspectionMode.get) {
+              sys.error("set(_.opmUpdatedBy).to(...) is not allowed (opmUpdatedBy cannot be set directly)")
+            } else {
+              model.updatedBy.asInstanceOf[AnyRef]
+            }
+          case "opmUpdateReason" =>
+            if (introspectionMode.get) {
+              sys.error("set(_.opmUpdateReason).to(...) is not allowed (opmUpdateReason cannot be set directly)")
+            } else {
+              model.updateReason.asInstanceOf[AnyRef]
+            }
           case fieldName if method.getParameterTypes.isEmpty =>
             if (introspectionMode.get) {
               val stack = introspectionScratch.get()
