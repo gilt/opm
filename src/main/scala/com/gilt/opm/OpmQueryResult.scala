@@ -22,10 +22,12 @@ import query._
  * being processed. Also, it is not recommended to call obj.all.length (or a sort), since that forces the stream to be
  * completely processed and negates any advantages of the lazy-loaded stream.
  *
+ * @param valueTranslator: @see com.gilt.opm.query.OpmSearcher
+ *
  * @author: Ryan Martin
  * @since: 11/1/12 6:37 PM
  */
-class OpmQueryResult[T <: OpmObject : Manifest](val all: Stream[T]) {
+class OpmQueryResult[T <: OpmObject : Manifest](val all: Stream[T], valueTranslator: Option[(String, Any) => Any] = None) {
   private val clazz = manifest[T].erasure
 
   /**
@@ -34,7 +36,7 @@ class OpmQueryResult[T <: OpmObject : Manifest](val all: Stream[T]) {
    * @param n: The maximum number of records to include.
    * @return
    */
-  def limit(n: Int): OpmQueryResult[T] = OpmQueryResult(all.take(n))
+  def limit(n: Int): OpmQueryResult[T] = OpmQueryResult(all.take(n), valueTranslator)
 
   /**
    * Use this to search within the current resultset to further filter the query. Complex queries can be chained
@@ -47,7 +49,7 @@ class OpmQueryResult[T <: OpmObject : Manifest](val all: Stream[T]) {
    * @return: Another result object, which can be further chained.
    */
   def search[V](v: T => V): OpmSearcherHelper[T, V] = {
-    OpmSearcher[T](query => search(query)).search(v)
+    OpmSearcher[T](query => search(query), valueTranslator).search(v)
   }
 
   /**
@@ -58,7 +60,7 @@ class OpmQueryResult[T <: OpmObject : Manifest](val all: Stream[T]) {
    * @param query: The query object to filter against.
    * @return: Another result object, which can be further chained.
    */
-  def search(query: OpmPropertyQuery) = OpmQueryResult[T](all filter byQuery(query))
+  def search(query: OpmPropertyQuery) = OpmQueryResult[T](all filter byQuery(query), valueTranslator)
 
   private def byQuery(query: OpmPropertyQuery)(item: T): Boolean = {
     val method = clazz.getMethod(query.property)
@@ -77,5 +79,5 @@ class OpmQueryResult[T <: OpmObject : Manifest](val all: Stream[T]) {
 }
 
 object OpmQueryResult {
-  def apply[T <: OpmObject : Manifest](stream: Stream[T]) = new OpmQueryResult[T](stream)
+  def apply[T <: OpmObject : Manifest](stream: Stream[T], valueTranslator: Option[(String, Any) => Any] = None) = new OpmQueryResult[T](stream, valueTranslator)
 }

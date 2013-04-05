@@ -16,6 +16,11 @@ trait OpmPropertyQuery {
 
   def isMatch(obj: Any): Boolean
 
+  // @see com.gilt.opm.query.OpmSearcher
+  def valueTranslator: Option[(String, Any) => Any]
+
+  // A convenience method to translate a value for a given field.
+  def translate(field: String) = valueTranslator.map(f => (v: Any) => f(field, v))
   /**
    * Define this to determine how the query can be used by Mongo.
    *

@@ -10,11 +10,11 @@ import com.gilt.opm.NanoTimestamp
  * @since: 11/7/12 7:28 PM
  */
 object MongoHelper {
-  def toMongo(v: Any): Any = {
+  def toMongo(v: Any, custom: Option[(Any) => Any] = None): Any = {
     v match {
       case ts: NanoTimestamp => ts.time
       case ts: Timestamp => (new NanoTimestamp(ts)).time
-      case _ => v
+      case _ => custom.map(f => f(v)).getOrElse(v)
     }
   }
 }

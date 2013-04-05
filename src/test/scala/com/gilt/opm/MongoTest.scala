@@ -5,6 +5,7 @@ import java.util.{UUID, Date}
 import java.util.concurrent.TimeUnit
 import scala.NoSuchElementException
 import org.scalatest.matchers.ShouldMatchers
+import com.giltgroupe.util.CompactGuid
 
 /**
  * Document Me.
@@ -23,6 +24,8 @@ object MongoTest {
     def createdAt: Date
     def tags: Seq[String]
     def tagSet: Set[String]
+    def guid: CompactGuid[TestDomain]
+    def other_guid: CompactGuid[TestDomain]
   }
 
   trait SimpleDomain extends OpmObject {
@@ -50,6 +53,24 @@ class MongoTest extends FunSuite with OpmMongoStorage[MongoTest.TestDomain] with
   import MongoTest._
   import OpmFactory._
   override val collectionName = "opm"
+
+  override def toMongoMapper: Option[PartialFunction[(String, Option[Class[_]], AnyRef), AnyRef]] = {
+    Some {
+      {
+        case ("guid", _, guid) => guid.toString
+        case ("other_guid", _, guid) => "xx" + guid.toString + "xx"
+      }
+    }
+  }
+
+  override def fromMongoMapper: Option[PartialFunction[(String, Option[Class[_]], AnyRef), AnyRef]] = {
+    Some {
+      {
+        case ("guid", _, str) => CompactGuid.apply[TestDomain](str.toString)
+        case ("other_guid", _, str) => CompactGuid.apply[TestDomain](str.toString.drop(2).dropRight(2))
+      }
+    }
+  }
 
   test("write 1000") {
     val count = 1000
@@ -216,6 +237,35 @@ class MongoTest extends FunSuite with OpmMongoStorage[MongoTest.TestDomain] with
     assert(results2.all.exists(opmObjectMatches(_, d3)))
   }
 
+  test("search by equals for single non-standard property") {
+    val key1 = uniqueKey
+    val guid1 = CompactGuid.randomCompactGuid[TestDomain]()
+    val guid2 = CompactGuid.randomCompactGuid[TestDomain]()
+    val d1 =
+      OpmFactory.instance[TestDomain](key1).
+        set(_.guid).to(guid1)
+    squashPut(d1)
+    // Push searched-for property down in the stack
+    0 until 10 foreach (i => squashPut(get(key1).get.set(_.createdAt).to(new Date)))
+    val d2 =
+      OpmFactory.instance[TestDomain](uniqueKey).
+        set(_.guid).to(guid2)
+    squashPut(d2)
+    val d3 =
+      OpmFactory.instance[TestDomain](uniqueKey).
+        set(_.guid).to(guid2)
+    squashPut(d3)
+
+    val results1 = search(_.guid).equals(guid1)
+    assert(results1.all.length == 1)
+    assert(opmObjectMatches(results1.all.head, d1))
+
+    val results2 = search(_.guid).equals(guid2)
+    assert(results2.all.length == 2)
+    assert(results2.all.exists(opmObjectMatches(_, d2)))
+    assert(results2.all.exists(opmObjectMatches(_, d3)))
+  }
+
   test("search by equals for multiple properties") {
     val d1 =
       OpmFactory.instance[TestDomain](uniqueKey).
@@ -241,6 +291,38 @@ class MongoTest extends FunSuite with OpmMongoStorage[MongoTest.TestDomain] with
     assert(opmObjectMatches(results1.all.head, d2))
 
     val results2 = search(_.name).equals("search_equals_name2").search(_.description).equals("search_equals_desc3")
+    assert(results2.all.length == 0)
+  }
+
+  test("search by equals for multiple non-standard properties") {
+    val guid1 = CompactGuid.randomCompactGuid[TestDomain]()
+    val guid2 = CompactGuid.randomCompactGuid[TestDomain]()
+    val other_guid1 = CompactGuid.randomCompactGuid[TestDomain]()
+    val other_guid2 = CompactGuid.randomCompactGuid[TestDomain]()
+    val d1 =
+      OpmFactory.instance[TestDomain](uniqueKey).
+        set(_.guid).to(guid1).
+        set(_.other_guid).to(other_guid1)
+    squashPut(d1)
+    val key2 = uniqueKey
+    val d2 =
+      OpmFactory.instance[TestDomain](key2).
+        set(_.guid).to(guid2).
+        set(_.other_guid).to(other_guid1)
+    squashPut(d2)
+    // Push searched-for property down in the stack
+    0 until 10 foreach (i => squashPut(get(key2).get.set(_.createdAt).to(new Date)))
+    val d3 =
+      OpmFactory.instance[TestDomain](uniqueKey).
+        set(_.guid).to(CompactGuid.randomCompactGuid[TestDomain]()).
+        set(_.other_guid).to(other_guid2)
+    squashPut(d3)
+
+    val results1 = search(_.guid).equals(guid2).search(_.other_guid).equals(other_guid1)
+    assert(results1.all.length == 1)
+    assert(opmObjectMatches(results1.all.head, d2))
+
+    val results2 = search(_.guid).equals(guid2).search(_.other_guid).equals(other_guid2)
     assert(results2.all.length == 0)
   }
 

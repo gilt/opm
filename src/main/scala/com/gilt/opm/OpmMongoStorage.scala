@@ -189,6 +189,13 @@ trait OpmMongoStorage[V <: OpmObject] extends OpmStorage[V] with LockManager {
     }
   }
 
+  // Can be used by other parts of the system to map values to Mongo-compatible - used specifically in search
+  // queries for non-standard values. This will intentionally blow an exception if the field does not exist.
+  private[opm] def mapToMongo(field: String, value: Any)(implicit mf: Manifest[V]): Any = {
+    val method = mf.erasure.getMethod(field)
+    mapToMongo(field, Option(method.getReturnType), OpmField(value))
+  }
+
   private [this] def mapFromMongo(field: String, fieldType: Option[Class[_]], value: Any): OpmField = {
     val isOption = fieldType.isDefined && fieldType.get.isAssignableFrom(classOf[Option[_]])
 
@@ -384,13 +391,16 @@ trait OpmMongoStorage[V <: OpmObject] extends OpmStorage[V] with LockManager {
   /**
    * Kicks off a search process. The fully-chained search looks like this: search(_.propertyName).equals("value")
    *
-   * @see OpmSearcher
+   * This uses the defined to-mongo mapping to help translate searched-for values. For example, CompactGuid can't be
+   * deserialized to JSON without defining toMongoMapper; search makes use of this since it's here already.
+   *
+   * @see com.gilt.opm.query.OpmSearcher
    * @param v: A 'method' that indicates which property should be searched against.
    * @tparam T: The class of the property being searched. In practice this will be inferred from the property given.
    * @return: The list of objects that match the query.
    */
   def search[T](v: V => T)(implicit mf: Manifest[V]): OpmSearcherHelper[V, T] = {
-    OpmSearcher[V](query => finishSearch(query)).search(v)
+    OpmSearcher[V](query => finishSearch(query), Some((field, value) => mapToMongo(field, value))).search(v)
   }
 
   /**
@@ -411,7 +421,7 @@ trait OpmMongoStorage[V <: OpmObject] extends OpmStorage[V] with LockManager {
       ))).
       toStream.
       flatMap((key: Any) => get(key.toString))
-    OpmQueryResult[V](mongoStream).search(query)
+    OpmQueryResult[V](mongoStream, Some((field, value) => mapToMongo(field, value))).search(query)
   }
 
   // deletes all records with the given key, doing nothing if the key doesn't exist.
