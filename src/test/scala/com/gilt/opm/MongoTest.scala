@@ -25,7 +25,7 @@ object MongoTest {
     def tags: Seq[String]
     def tagSet: Set[String]
     def guid: CompactGuid[TestDomain]
-    def other_guid: CompactGuid[TestDomain]
+    def other_guid: Option[CompactGuid[TestDomain]]
   }
 
   trait SimpleDomain extends OpmObject {
@@ -58,7 +58,7 @@ class MongoTest extends FunSuite with OpmMongoStorage[MongoTest.TestDomain] with
     Some {
       {
         case ("guid", _, guid) => guid.toString
-        case ("other_guid", _, guid) => "xx" + guid.toString + "xx"
+        case ("other_guid", _, guid@Some(g)) => "xx" + g.toString + "xx"
       }
     }
   }
@@ -297,8 +297,8 @@ class MongoTest extends FunSuite with OpmMongoStorage[MongoTest.TestDomain] with
   test("search by equals for multiple non-standard properties") {
     val guid1 = CompactGuid.randomCompactGuid[TestDomain]()
     val guid2 = CompactGuid.randomCompactGuid[TestDomain]()
-    val other_guid1 = CompactGuid.randomCompactGuid[TestDomain]()
-    val other_guid2 = CompactGuid.randomCompactGuid[TestDomain]()
+    val other_guid1 = Option(CompactGuid.randomCompactGuid[TestDomain]())
+    val other_guid2 = Option(CompactGuid.randomCompactGuid[TestDomain]())
     val d1 =
       OpmFactory.instance[TestDomain](uniqueKey).
         set(_.guid).to(guid1).
@@ -322,8 +322,15 @@ class MongoTest extends FunSuite with OpmMongoStorage[MongoTest.TestDomain] with
     assert(results1.all.length == 1)
     assert(opmObjectMatches(results1.all.head, d2))
 
-    val results2 = search(_.guid).equals(guid2).search(_.other_guid).equals(other_guid2)
-    assert(results2.all.length == 0)
+    val results2 = search(_.other_guid).equals(other_guid1).search(_.guid).equals(guid2)
+    assert(results2.all.length == 1)
+    assert(opmObjectMatches(results2.all.head, d2))
+
+    val results3 = search(_.guid).equals(guid2).search(_.other_guid).equals(other_guid2)
+    assert(results3.all.length == 0)
+
+    val results4 = search(_.other_guid).equals(other_guid2).search(_.guid).equals(guid2)
+    assert(results4.all.length == 0)
   }
 
   test("search by query ignores old updates") {

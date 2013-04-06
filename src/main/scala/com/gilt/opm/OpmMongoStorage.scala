@@ -36,6 +36,8 @@ trait OpmMongoStorage[V <: OpmObject] extends OpmStorage[V] with LockManager {
 
   def wavelength: Int = 5           // value frame + (wavelength - 1) diff frames
   def toMongoMapper: Option[PartialFunction[(String, Option[Class[_]], AnyRef), AnyRef]] = None
+  // Note: If a field is an Option, this class will wrap it correctly; in fromMongoMapper, you only need to map to the
+  // base class. If you include the Option, you'll end up with something like this: Some(Some(...)) instead of Some(...).
   def fromMongoMapper: Option[PartialFunction[(String, Option[Class[_]], AnyRef), AnyRef]] = None
 
   private [this] lazy val defaultToMongoMapper: PartialFunction[(String, Option[Class[_]], AnyRef), AnyRef] = {
