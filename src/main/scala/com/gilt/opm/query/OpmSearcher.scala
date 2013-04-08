@@ -72,6 +72,14 @@ case class OpmSearcher[T <: OpmObject : Manifest](finishSearch: OpmPropertyQuery
   private [query] def betweenExcl[V <% Ordered[V]](start: V, end: V) = finishSearch(OpmPropertyBetweenExclusive(property, start, end, valueTranslator))
 
   /**
+   * Matches records where the (array) property contains the given value.
+   *
+   * @param value
+   * @return
+   */
+  private [query] def contains[V](value: V) = finishSearch(OpmPropertyContains(property, value, valueTranslator))
+
+  /**
    * Matches records where property == value
    *
    * @param value
@@ -94,6 +102,14 @@ case class OpmSearcher[T <: OpmObject : Manifest](finishSearch: OpmPropertyQuery
    * @return
    */
   private [query] def gte[V <% Ordered[V]](value: V) = finishSearch(OpmPropertyGreaterThanOrEqual(property, value, valueTranslator))
+
+  /**
+   * Matches records where property is included in the given array.
+   *
+   * @param values
+   * @return
+   */
+  private [query] def in[V](values: Iterable[V]) = finishSearch(OpmPropertyIn(property, values, valueTranslator))
 
   /**
    * Matches records in which the property is not defined.
@@ -132,7 +148,13 @@ case class OpmSearcherHelper[T <: OpmObject, V](result: OpmSearcher[T]) {
   def equals(v: V) = result.eql(v)
   def ===(v: V) = this.equals(v)
 
+  def in(v: Iterable[V]) = result.in(v)
+
   def isBlank() = result.isBlank()
+}
+
+class OpmSearcherHelperWithIterable[T <: OpmObject, V, U <: Iterable[V]](refer: OpmSearcherHelper[T, U]) {
+  def contains(v: V) = refer.result.contains(v)
 }
 
 class OrderedOpmSearcherHelper[T <: OpmObject, V <% Ordered[V]](refer: OpmSearcherHelper[T, V]) {
@@ -155,4 +177,9 @@ class OrderedOpmSearcherHelper[T <: OpmObject, V <% Ordered[V]](refer: OpmSearch
 
 object OpmSearcherHelper {
   implicit def nonorderedToOrdered[T <: OpmObject, V <% Ordered[V]](orig: OpmSearcherHelper[T, V]) = new OrderedOpmSearcherHelper[T, V](orig)
+  implicit def nonWithIterableToWithIterable[T <: OpmObject, V](orig: OpmSearcherHelper[T, Iterable[V]]) = new OpmSearcherHelperWithIterable[T, V, Iterable[V]](orig)
+  // These are a bit hack-ish, but I can't quite invoke the correct co-/contra-variance voodoo here to make these
+  // implicits work without forcing it here. Feel free to fix if you can.
+  implicit def nonWithIterableToWithSeq[T <: OpmObject, V](orig: OpmSearcherHelper[T, Seq[V]]) = new OpmSearcherHelperWithIterable[T, V, Seq[V]](orig)
+  implicit def nonWithIterableToWithSet[T <: OpmObject, V](orig: OpmSearcherHelper[T, Set[V]]) = new OpmSearcherHelperWithIterable[T, V, Set[V]](orig)
 }

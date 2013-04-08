@@ -410,6 +410,120 @@ class MongoTest extends FunSuite with OpmMongoStorage[MongoTest.TestDomain] with
     assert(opmObjectMatches(results1.all.head, d2))
   }
 
+  test("search by contains for first query") {
+    val d1 =
+      OpmFactory.instance[TestDomain](uniqueKey).
+        set(_.name).to("search_contains1").
+        set(_.tags).to(Seq("tag1", "tag2"))
+    squashPut(d1)
+    val d2 =
+      OpmFactory.instance[TestDomain](uniqueKey).
+        set(_.name).to("search_contains1").
+        set(_.tags).to(Seq("tag4", "tag2"))
+    squashPut(d2)
+    val d3 =
+      OpmFactory.instance[TestDomain](uniqueKey).
+        set(_.name).to("search_contains1").
+        set(_.tags).to(Seq("tag3", "tag1"))
+    squashPut(d3)
+
+    val results1 = search(_.tags).contains("tag1").search(_.name).equals("search_contains1")
+    assert(results1.all.length == 2)
+    assert(results1.all.exists(opmObjectMatches(_, d1)))
+    assert(!results1.all.exists(opmObjectMatches(_, d2)))
+    assert(results1.all.exists(opmObjectMatches(_, d3)))
+
+    val results2 = search(_.tags).contains("tag3").search(_.name).equals("search_contains1")
+    assert(results2.all.length == 1)
+    assert(!results2.all.exists(opmObjectMatches(_, d1)))
+    assert(!results2.all.exists(opmObjectMatches(_, d2)))
+    assert(results2.all.exists(opmObjectMatches(_, d3)))
+  }
+
+  test("search by contains for subsequent query") {
+    val d1 =
+      OpmFactory.instance[TestDomain](uniqueKey).
+        set(_.name).to("search_contains2").
+        set(_.tags).to(Seq("tag1", "tag2"))
+    squashPut(d1)
+    val d2 =
+      OpmFactory.instance[TestDomain](uniqueKey).
+        set(_.name).to("search_contains2").
+        set(_.tags).to(Seq("tag4", "tag2"))
+    squashPut(d2)
+    val d3 =
+      OpmFactory.instance[TestDomain](uniqueKey).
+        set(_.name).to("search_contains2").
+        set(_.tags).to(Seq("tag3", "tag1"))
+    squashPut(d3)
+
+    val results1 = search(_.name).equals("search_contains2").search(_.tags).contains("tag1")
+    assert(results1.all.length == 2)
+    assert(results1.all.exists(opmObjectMatches(_, d1)))
+    assert(!results1.all.exists(opmObjectMatches(_, d2)))
+    assert(results1.all.exists(opmObjectMatches(_, d3)))
+
+    val results2 = search(_.name).equals("search_contains2").search(_.tags).contains("tag3")
+    assert(results2.all.length == 1)
+    assert(!results2.all.exists(opmObjectMatches(_, d1)))
+    assert(!results2.all.exists(opmObjectMatches(_, d2)))
+    assert(results2.all.exists(opmObjectMatches(_, d3)))
+  }
+
+  test("search by 'in' for first query") {
+    val d1 =
+      OpmFactory.instance[TestDomain](uniqueKey).
+        set(_.name).to("search_in1").
+        set(_.description).to("desc1")
+    squashPut(d1)
+    val d2 =
+      OpmFactory.instance[TestDomain](uniqueKey).
+        set(_.name).to("search_in1")
+    squashPut(d2)
+    val d3 =
+      OpmFactory.instance[TestDomain](uniqueKey).
+        set(_.name).to("search_in1").
+        set(_.description).to("desc3")
+    squashPut(d3)
+
+    val results1 = search(_.description).in(Set("desc1", "desc2")).search(_.name).equals("search_in1")
+    assert(results1.all.length == 1)
+    assert(opmObjectMatches(results1.all.head, d1))
+
+    val results2 = search(_.description).in(Set("desc1", "desc3")).search(_.name).equals("search_in1")
+    assert(results2.all.length == 2)
+    assert(results2.all.exists(opmObjectMatches(_, d1)))
+    assert(!results2.all.exists(opmObjectMatches(_, d2)))
+    assert(results2.all.exists(opmObjectMatches(_, d3)))
+  }
+
+  test("search by 'in' for subsequent query") {
+    val d1 =
+      OpmFactory.instance[TestDomain](uniqueKey).
+        set(_.name).to("search_in2").
+        set(_.description).to("desc1")
+    squashPut(d1)
+    val d2 =
+      OpmFactory.instance[TestDomain](uniqueKey).
+        set(_.name).to("search_in2")
+    squashPut(d2)
+    val d3 =
+      OpmFactory.instance[TestDomain](uniqueKey).
+        set(_.name).to("search_in2").
+        set(_.description).to("desc3")
+    squashPut(d3)
+
+    val results1 = search(_.name).equals("search_in2").search(_.description).in(Set("desc1", "desc2"))
+    assert(results1.all.length == 1)
+    assert(opmObjectMatches(results1.all.head, d1))
+
+    val results2 = search(_.name).equals("search_in2").search(_.description).in(Set("desc1", "desc3"))
+    assert(results2.all.length == 2)
+    assert(results2.all.exists(opmObjectMatches(_, d1)))
+    assert(!results2.all.exists(opmObjectMatches(_, d2)))
+    assert(results2.all.exists(opmObjectMatches(_, d3)))
+  }
+
   test("search by between for first query") {
     val key1 = uniqueKey
     val d1 =
