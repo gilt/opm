@@ -217,6 +217,32 @@ class MongoTest extends FunSuite with OpmMongoStorage[MongoTest.TestDomain] with
     }
   }
 
+  test("allRecords") {
+    val key1 = uniqueKey
+    val d1 =
+      OpmFactory.instance[TestDomain](key1).
+        set(_.name).to("all_records")
+    squashPut(d1)
+    // Push searched-for property down in the stack
+    0 until 10 foreach (i => squashPut(get(key1).get.set(_.createdAt).to(new Date)))
+    val d2 =
+      OpmFactory.instance[TestDomain](uniqueKey).
+        set(_.name).to("all_records")
+    squashPut(d2)
+    val d3 =
+      OpmFactory.instance[TestDomain](uniqueKey).
+        set(_.name).to("all_records")
+    squashPut(d3)
+
+    val results1 = allRecords
+    assert(results1.all.exists(opmObjectMatches(_, d1)))
+    assert(results1.all.exists(opmObjectMatches(_, d2)))
+    assert(results1.all.exists(opmObjectMatches(_, d3)))
+
+    val results2 = allRecords.limit(2)
+    assert(results2.all.length == 2)
+  }
+
   test("search by equals for single property") {
     val key1 = uniqueKey
     val d1 =

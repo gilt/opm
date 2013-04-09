@@ -10,6 +10,8 @@ import query.{OpmSearcherHelper, OpmSearcher, OpmPropertyQuery}
  * @since 9/4/12 7:07 PM
  */
 trait OpmStorage[V <: OpmObject] {
+  // This can be used to pull all records, then manipulate the results with limit and sort.
+  def allRecords(implicit mf: Manifest[V]): OpmQueryResult[V]
   def get(key: String)(implicit mf: Manifest[V]): Option[V]
   def search[T](v: V => T)(implicit mf: Manifest[V]): OpmSearcherHelper[V, T]
   def put(obj: V)(implicit mf: Manifest[V])

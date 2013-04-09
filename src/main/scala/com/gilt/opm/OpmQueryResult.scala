@@ -67,9 +67,9 @@ class OpmQueryResult[T <: OpmObject : Manifest](val all: Stream[T], valueTransla
   def search(query: OpmPropertyQuery, matchInverse: Boolean) = OpmQueryResult[T](all filter byQuery(query, matchInverse), valueTranslator)
 
   private def byQuery(query: OpmPropertyQuery, matchInverse: Boolean)(item: T): Boolean = {
-    val method = clazz.getMethod(query.property)
     val currentValue = try {
-      method.invoke(item)
+      if (query.property == "") null
+      else clazz.getMethod(query.property).invoke(item)
     } catch {
       // Look for the specific case of the Mongo document missing the property (which may happen due to "schema" changes)
       case e: Exception => {

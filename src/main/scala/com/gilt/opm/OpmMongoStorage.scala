@@ -9,8 +9,7 @@ import com.mongodb.DBObject
 import java.util.{ConcurrentModificationException, UUID, Date}
 import lock.LockManager
 import org.bson.types.BasicBSONList
-import query.{OpmSearcherHelper, OpmPropertyGreaterThanOrEqual, OpmPropertyLessThanOrEqual, OpmPropertyQuery, OpmSearcher}
-import com.gilt.opm.OpmFactory.OpmField
+import query._
 
 /**
  * Mixing to provide mongo storage for OpmObjects.
@@ -360,6 +359,13 @@ trait OpmMongoStorage[V <: OpmObject] extends OpmStorage[V] with LockManager {
 
         assembleFinalObjects(initialObjs.toStream #::: loadStream(key, lastValue, mongoStream.drop(initialObjs.size), mf.erasure)).headOption
     }
+  }
+
+  def allRecords(implicit mf: Manifest[V]): OpmQueryResult[V] = {
+    val mongoStream = collection.distinct(Key).
+      toStream.
+      flatMap((key: Any) => get(key.toString))
+    OpmQueryResult(mongoStream, Some((field, value) => mapToMongo(field, value))).search(OpmQueryNoFilter, false)
   }
 
   /**
