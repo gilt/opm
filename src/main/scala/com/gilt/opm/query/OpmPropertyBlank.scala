@@ -10,6 +10,10 @@ import com.mongodb.casbah.commons.MongoDBObject
  */
 case class OpmPropertyBlank(property: String) extends OpmPropertyQuery {
   override def isMatch(obj: Any) = obj == null
+
   val valueTranslator = None
-  override def toMongoDBObject(prefix: String = "") = MongoDBObject("%s%s".format(prefix, property) -> MongoDBObject("$exists" -> false) )
+
+  override def toMongoDBObject(prefix: String = "", matchInverse: Boolean = false) =
+    if (matchInverse) MongoDBObject("%s%s".format(prefix, property) -> MongoDBObject("$exists" -> true) )
+    else MongoDBObject("%s%s".format(prefix, property) -> MongoDBObject("$exists" -> false))
 }

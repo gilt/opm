@@ -13,11 +13,19 @@ import com.giltgroupe.service.commons.mongo.MongoHelper.toMongo
  */
 case class OpmPropertyBetween[T <% Ordered[T]](property: String, start: T, end: T, valueTranslator: Option[(String, Any) => Any] = None) extends OpmPropertyQuery {
   override def isMatch(obj: Any): Boolean = {
+    if (obj == null) return false
     val curObj = obj.asInstanceOf[T]
     (curObj >= start) && (curObj <= end)
   }
-  override def toMongoDBObject(prefix: String = "") = MongoDBObject("$and" -> MongoDBList(
-    MongoDBObject("%s%s".format(prefix, property) -> MongoDBObject("$gte" -> toMongo(start, translate(property)))),
-    MongoDBObject("%s%s".format(prefix, property) -> MongoDBObject("$lte" -> toMongo(end, translate(property))))
-  ))
+  override def toMongoDBObject(prefix: String = "", matchInverse: Boolean = false) =
+    if (matchInverse)
+      MongoDBObject("$or" -> MongoDBList(
+        MongoDBObject("%s%s".format(prefix, property) -> MongoDBObject("$lt" -> toMongo(start, translate(property)))),
+        MongoDBObject("%s%s".format(prefix, property) -> MongoDBObject("$gt" -> toMongo(end, translate(property))))
+      ))
+    else
+      MongoDBObject("$and" -> MongoDBList(
+        MongoDBObject("%s%s".format(prefix, property) -> MongoDBObject("$gte" -> toMongo(start, translate(property)))),
+        MongoDBObject("%s%s".format(prefix, property) -> MongoDBObject("$lte" -> toMongo(end, translate(property))))
+      ))
 }

@@ -25,7 +25,8 @@ trait OpmPropertyQuery {
    * Define this to determine how the query can be used by Mongo.
    *
    * @param prefix: The prefix to add to the property name in the query.
+   * @param matchInverse: Match the inverse of the query, i.e. 'not'.
    * @return
    */
-  def toMongoDBObject(prefix: String = ""): DBObject
+  def toMongoDBObject(prefix: String = "", matchInverse: Boolean = false): DBObject
 }

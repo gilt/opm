@@ -371,6 +371,65 @@ class MongoTest extends FunSuite with OpmMongoStorage[MongoTest.TestDomain] with
     assert(d3.timeline.exists(hist => hist.name == "search_updated_name1"))
   }
 
+  test("search by 'not' for first query") {
+    val key1 = uniqueKey
+    val d1 =
+      OpmFactory.instance[TestDomain](key1).
+        set(_.name).to("name1").
+        set(_.description).to("description1")
+    squashPut(d1)
+    // Push searched-for property down in the stack
+    0 until 10 foreach (i => squashPut(get(key1).get.set(_.createdAt).to(new Date)))
+    val d2 =
+      OpmFactory.instance[TestDomain](uniqueKey).
+        set(_.name).to("name2").
+        set(_.description).to("description2")
+    squashPut(d2)
+    val d3 =
+      OpmFactory.instance[TestDomain](uniqueKey).
+        set(_.name).to("name2")
+    squashPut(d3)
+
+    val results1 = search(_.description).not().isBlank()
+    assert(results1.all.exists(opmObjectMatches(_, d1)))
+    assert(results1.all.exists(opmObjectMatches(_, d2)))
+    assert(!results1.all.exists(opmObjectMatches(_, d3)))
+
+    val results2 = search(_.description).not().equals("description2")
+    assert(results2.all.exists(opmObjectMatches(_, d1)))
+    assert(!results2.all.exists(opmObjectMatches(_, d2)))
+    assert(results2.all.exists(opmObjectMatches(_, d3)))
+
+    val results3 = search(_.description).not().lt("description2")
+    assert(!results3.all.exists(opmObjectMatches(_, d1)))
+    assert(results3.all.exists(opmObjectMatches(_, d2)))
+    assert(!results3.all.exists(opmObjectMatches(_, d3)))
+  }
+
+  test("search by 'not' for subsequent query") {
+    val d1 =
+      OpmFactory.instance[TestDomain](uniqueKey).
+        set(_.name).to("search_not").
+        set(_.description).to("desc")
+    squashPut(d1)
+    val d2 =
+      OpmFactory.instance[TestDomain]("uniqueKey").
+        set(_.name).to("search_not")
+    squashPut(d2)
+
+    val results1 = search(_.name).equals("search_not").search(_.description).not().isBlank()
+    assert(results1.all.length == 1)
+    assert(opmObjectMatches(results1.all.head, d1))
+
+    val results2 = search(_.name).equals("search_not").search(_.description).not().equals("desc")
+    assert(results2.all.length == 1)
+    assert(opmObjectMatches(results2.all.head, d2))
+
+    val results3 = search(_.name).equals("search_not").search(_.description).not().lte("desc")
+    assert(results3.all.length == 1)
+    assert(opmObjectMatches(results3.all.head, d2))
+  }
+
   test("search by blank for first query") {
     val key1 = uniqueKey
     val d1 =
@@ -433,11 +492,23 @@ class MongoTest extends FunSuite with OpmMongoStorage[MongoTest.TestDomain] with
     assert(!results1.all.exists(opmObjectMatches(_, d2)))
     assert(results1.all.exists(opmObjectMatches(_, d3)))
 
-    val results2 = search(_.tags).contains("tag3").search(_.name).equals("search_contains1")
+    val results2 = search(_.tags).not().contains("tag1").search(_.name).equals("search_contains1")
     assert(results2.all.length == 1)
     assert(!results2.all.exists(opmObjectMatches(_, d1)))
-    assert(!results2.all.exists(opmObjectMatches(_, d2)))
-    assert(results2.all.exists(opmObjectMatches(_, d3)))
+    assert(results2.all.exists(opmObjectMatches(_, d2)))
+    assert(!results2.all.exists(opmObjectMatches(_, d3)))
+
+    val results3 = search(_.tags).contains("tag3").search(_.name).equals("search_contains1")
+    assert(results3.all.length == 1)
+    assert(!results3.all.exists(opmObjectMatches(_, d1)))
+    assert(!results3.all.exists(opmObjectMatches(_, d2)))
+    assert(results3.all.exists(opmObjectMatches(_, d3)))
+
+    val results4 = search(_.tags).not().contains("tag3").search(_.name).equals("search_contains1")
+    assert(results4.all.length == 2)
+    assert(results4.all.exists(opmObjectMatches(_, d1)))
+    assert(results4.all.exists(opmObjectMatches(_, d2)))
+    assert(!results4.all.exists(opmObjectMatches(_, d3)))
   }
 
   test("search by contains for subsequent query") {
@@ -463,11 +534,23 @@ class MongoTest extends FunSuite with OpmMongoStorage[MongoTest.TestDomain] with
     assert(!results1.all.exists(opmObjectMatches(_, d2)))
     assert(results1.all.exists(opmObjectMatches(_, d3)))
 
-    val results2 = search(_.name).equals("search_contains2").search(_.tags).contains("tag3")
+    val results2 = search(_.name).equals("search_contains2").search(_.tags).not().contains("tag1")
     assert(results2.all.length == 1)
     assert(!results2.all.exists(opmObjectMatches(_, d1)))
-    assert(!results2.all.exists(opmObjectMatches(_, d2)))
-    assert(results2.all.exists(opmObjectMatches(_, d3)))
+    assert(results2.all.exists(opmObjectMatches(_, d2)))
+    assert(!results2.all.exists(opmObjectMatches(_, d3)))
+
+    val results3 = search(_.name).equals("search_contains2").search(_.tags).contains("tag3")
+    assert(results3.all.length == 1)
+    assert(!results3.all.exists(opmObjectMatches(_, d1)))
+    assert(!results3.all.exists(opmObjectMatches(_, d2)))
+    assert(results3.all.exists(opmObjectMatches(_, d3)))
+
+    val results4 = search(_.name).equals("search_contains2").search(_.tags).not().contains("tag3")
+    assert(results4.all.length == 2)
+    assert(results4.all.exists(opmObjectMatches(_, d1)))
+    assert(results4.all.exists(opmObjectMatches(_, d2)))
+    assert(!results4.all.exists(opmObjectMatches(_, d3)))
   }
 
   test("search by 'in' for first query") {
@@ -488,13 +571,27 @@ class MongoTest extends FunSuite with OpmMongoStorage[MongoTest.TestDomain] with
 
     val results1 = search(_.description).in(Set("desc1", "desc2")).search(_.name).equals("search_in1")
     assert(results1.all.length == 1)
-    assert(opmObjectMatches(results1.all.head, d1))
+    assert(results1.all.exists(opmObjectMatches(_, d1)))
+    assert(!results1.all.exists(opmObjectMatches(_, d2)))
+    assert(!results1.all.exists(opmObjectMatches(_, d3)))
 
-    val results2 = search(_.description).in(Set("desc1", "desc3")).search(_.name).equals("search_in1")
+    val results2 = search(_.description).not().in(Set("desc1", "desc2")).search(_.name).equals("search_in1")
     assert(results2.all.length == 2)
-    assert(results2.all.exists(opmObjectMatches(_, d1)))
-    assert(!results2.all.exists(opmObjectMatches(_, d2)))
+    assert(!results2.all.exists(opmObjectMatches(_, d1)))
+    assert(results2.all.exists(opmObjectMatches(_, d2)))
     assert(results2.all.exists(opmObjectMatches(_, d3)))
+
+    val results3 = search(_.description).in(Set("desc1", "desc3")).search(_.name).equals("search_in1")
+    assert(results3.all.length == 2)
+    assert(results3.all.exists(opmObjectMatches(_, d1)))
+    assert(!results3.all.exists(opmObjectMatches(_, d2)))
+    assert(results3.all.exists(opmObjectMatches(_, d3)))
+
+    val results4 = search(_.description).not().in(Set("desc1", "desc3")).search(_.name).equals("search_in1")
+    assert(results4.all.length == 1)
+    assert(!results4.all.exists(opmObjectMatches(_, d1)))
+    assert(results4.all.exists(opmObjectMatches(_, d2)))
+    assert(!results4.all.exists(opmObjectMatches(_, d3)))
   }
 
   test("search by 'in' for subsequent query") {
@@ -549,11 +646,17 @@ class MongoTest extends FunSuite with OpmMongoStorage[MongoTest.TestDomain] with
         set(_.description).to("desc")
     squashPut(d4)
 
-    val results = search(_.name).between("2", "3").search(_.description).equals("desc")
-    assert(!results.all.exists(opmObjectMatches(_, d1)))
-    assert(results.all.exists(opmObjectMatches(_, d2)))
-    assert(results.all.exists(opmObjectMatches(_, d3)))
-    assert(!results.all.exists(opmObjectMatches(_, d4)))
+    val results1 = search(_.name).between("2", "3").search(_.description).equals("desc")
+    assert(!results1.all.exists(opmObjectMatches(_, d1)))
+    assert(results1.all.exists(opmObjectMatches(_, d2)))
+    assert(results1.all.exists(opmObjectMatches(_, d3)))
+    assert(!results1.all.exists(opmObjectMatches(_, d4)))
+
+    val results2 = search(_.name).not().between("2", "3").search(_.description).equals("desc")
+    assert(results2.all.exists(opmObjectMatches(_, d1)))
+    assert(!results2.all.exists(opmObjectMatches(_, d2)))
+    assert(!results2.all.exists(opmObjectMatches(_, d3)))
+    assert(results2.all.exists(opmObjectMatches(_, d4)))
   }
 
   test("search by between for subsequent query") {
@@ -580,11 +683,18 @@ class MongoTest extends FunSuite with OpmMongoStorage[MongoTest.TestDomain] with
         set(_.name).to("search_bet").
         set(_.description).to("4")
     squashPut(d4)
-    val results = search(_.name).equals("search_bet").search(_.description).between("2", "3")
-    assert(!results.all.exists(opmObjectMatches(_, d1)))
-    assert(results.all.exists(opmObjectMatches(_, d2)))
-    assert(results.all.exists(opmObjectMatches(_, d3)))
-    assert(!results.all.exists(opmObjectMatches(_, d4)))
+
+    val results1 = search(_.name).equals("search_bet").search(_.description).between("2", "3")
+    assert(!results1.all.exists(opmObjectMatches(_, d1)))
+    assert(results1.all.exists(opmObjectMatches(_, d2)))
+    assert(results1.all.exists(opmObjectMatches(_, d3)))
+    assert(!results1.all.exists(opmObjectMatches(_, d4)))
+
+    val results2 = search(_.name).equals("search_bet").search(_.description).not().between("2", "3")
+    assert(results2.all.exists(opmObjectMatches(_, d1)))
+    assert(!results2.all.exists(opmObjectMatches(_, d2)))
+    assert(!results2.all.exists(opmObjectMatches(_, d3)))
+    assert(results2.all.exists(opmObjectMatches(_, d4)))
   }
 
   test("search by between exclusive for first query") {
@@ -612,11 +722,17 @@ class MongoTest extends FunSuite with OpmMongoStorage[MongoTest.TestDomain] with
         set(_.description).to("desc")
     squashPut(d4)
 
-    val results = search(_.name).betweenExclusive("1", "4").search(_.description).equals("desc")
-    assert(!results.all.exists(opmObjectMatches(_, d1)))
-    assert(results.all.exists(opmObjectMatches(_, d2)))
-    assert(results.all.exists(opmObjectMatches(_, d3)))
-    assert(!results.all.exists(opmObjectMatches(_, d4)))
+    val results1 = search(_.name).betweenExclusive("1", "4").search(_.description).equals("desc")
+    assert(!results1.all.exists(opmObjectMatches(_, d1)))
+    assert(results1.all.exists(opmObjectMatches(_, d2)))
+    assert(results1.all.exists(opmObjectMatches(_, d3)))
+    assert(!results1.all.exists(opmObjectMatches(_, d4)))
+
+    val results2 = search(_.name).not().betweenExclusive("1", "4").search(_.description).equals("desc")
+    assert(results2.all.exists(opmObjectMatches(_, d1)))
+    assert(!results2.all.exists(opmObjectMatches(_, d2)))
+    assert(!results2.all.exists(opmObjectMatches(_, d3)))
+    assert(results2.all.exists(opmObjectMatches(_, d4)))
   }
 
   test("search by between exclusive for subsequent query") {
@@ -643,11 +759,18 @@ class MongoTest extends FunSuite with OpmMongoStorage[MongoTest.TestDomain] with
         set(_.name).to("search_bet_excl").
         set(_.description).to("4")
     squashPut(d4)
-    val results = search(_.name).equals("search_bet_excl").search(_.description).betweenExclusive("1", "4")
-    assert(!results.all.exists(opmObjectMatches(_, d1)))
-    assert(results.all.exists(opmObjectMatches(_, d2)))
-    assert(results.all.exists(opmObjectMatches(_, d3)))
-    assert(!results.all.exists(opmObjectMatches(_, d4)))
+
+    val results1 = search(_.name).equals("search_bet_excl").search(_.description).betweenExclusive("1", "4")
+    assert(!results1.all.exists(opmObjectMatches(_, d1)))
+    assert(results1.all.exists(opmObjectMatches(_, d2)))
+    assert(results1.all.exists(opmObjectMatches(_, d3)))
+    assert(!results1.all.exists(opmObjectMatches(_, d4)))
+
+    val results2 = search(_.name).equals("search_bet_excl").search(_.description).not().betweenExclusive("1", "4")
+    assert(results2.all.exists(opmObjectMatches(_, d1)))
+    assert(!results2.all.exists(opmObjectMatches(_, d2)))
+    assert(!results2.all.exists(opmObjectMatches(_, d3)))
+    assert(results2.all.exists(opmObjectMatches(_, d4)))
   }
 
   test("search by greater than for first query") {
@@ -670,10 +793,15 @@ class MongoTest extends FunSuite with OpmMongoStorage[MongoTest.TestDomain] with
         set(_.description).to("desc")
     squashPut(d3)
 
-    val results = search(_.name).greaterThan("1").search(_.description).equals("desc")
-    assert(!results.all.exists(opmObjectMatches(_, d1)))
-    assert(results.all.exists(opmObjectMatches(_, d2)))
-    assert(results.all.exists(opmObjectMatches(_, d3)))
+    val results1 = search(_.name).greaterThan("1").search(_.description).equals("desc")
+    assert(!results1.all.exists(opmObjectMatches(_, d1)))
+    assert(results1.all.exists(opmObjectMatches(_, d2)))
+    assert(results1.all.exists(opmObjectMatches(_, d3)))
+
+    val results2 = search(_.name).not().greaterThan("1").search(_.description).equals("desc")
+    assert(results2.all.exists(opmObjectMatches(_, d1)))
+    assert(!results2.all.exists(opmObjectMatches(_, d2)))
+    assert(!results2.all.exists(opmObjectMatches(_, d3)))
   }
 
   test("search by greater than for subsequent query") {
@@ -690,9 +818,14 @@ class MongoTest extends FunSuite with OpmMongoStorage[MongoTest.TestDomain] with
         set(_.name).to("search_gt").
         set(_.description).to("2")
     squashPut(d2)
+
     val results1 = search(_.name).equals("search_gt").search(_.description).greaterThan("1")
     assert(results1.all.length == 1)
     assert(opmObjectMatches(results1.all.head, d2))
+
+    val results2 = search(_.name).equals("search_gt").search(_.description).not().greaterThan("1")
+    assert(results2.all.length == 1)
+    assert(opmObjectMatches(results2.all.head, d1))
   }
 
   test("search by greater than or equal for first query") {
@@ -715,10 +848,15 @@ class MongoTest extends FunSuite with OpmMongoStorage[MongoTest.TestDomain] with
         set(_.description).to("desc")
     squashPut(d3)
 
-    val results = search(_.name).greaterThanOrEqual("2").search(_.description).equals("desc")
-    assert(!results.all.exists(opmObjectMatches(_, d1)))
-    assert(results.all.exists(opmObjectMatches(_, d2)))
-    assert(results.all.exists(opmObjectMatches(_, d3)))
+    val results1 = search(_.name).greaterThanOrEqual("2").search(_.description).equals("desc")
+    assert(!results1.all.exists(opmObjectMatches(_, d1)))
+    assert(results1.all.exists(opmObjectMatches(_, d2)))
+    assert(results1.all.exists(opmObjectMatches(_, d3)))
+
+    val results2 = search(_.name).not().greaterThanOrEqual("2").search(_.description).equals("desc")
+    assert(results2.all.exists(opmObjectMatches(_, d1)))
+    assert(!results2.all.exists(opmObjectMatches(_, d2)))
+    assert(!results2.all.exists(opmObjectMatches(_, d3)))
   }
 
   test("search by greater than or equal for subsequent query") {
@@ -735,9 +873,14 @@ class MongoTest extends FunSuite with OpmMongoStorage[MongoTest.TestDomain] with
         set(_.name).to("search_gte").
         set(_.description).to("2")
     squashPut(d2)
+
     val results1 = search(_.name).equals("search_gte").search(_.description).greaterThanOrEqual("2")
     assert(results1.all.length == 1)
     assert(opmObjectMatches(results1.all.head, d2))
+
+    val results2 = search(_.name).equals("search_gte").search(_.description).not().greaterThanOrEqual("2")
+    assert(results2.all.length == 1)
+    assert(opmObjectMatches(results2.all.head, d1))
   }
 
   test("search by less than for first query") {
@@ -760,10 +903,15 @@ class MongoTest extends FunSuite with OpmMongoStorage[MongoTest.TestDomain] with
         set(_.description).to("desc")
     squashPut(d3)
 
-    val results = search(_.name).lessThan("3").search(_.description).equals("desc")
-    assert(results.all.exists(opmObjectMatches(_, d1)))
-    assert(results.all.exists(opmObjectMatches(_, d2)))
-    assert(!results.all.exists(opmObjectMatches(_, d3)))
+    val results1 = search(_.name).lessThan("3").search(_.description).equals("desc")
+    assert(results1.all.exists(opmObjectMatches(_, d1)))
+    assert(results1.all.exists(opmObjectMatches(_, d2)))
+    assert(!results1.all.exists(opmObjectMatches(_, d3)))
+
+    val results2 = search(_.name).not().lessThan("3").search(_.description).equals("desc")
+    assert(!results2.all.exists(opmObjectMatches(_, d1)))
+    assert(!results2.all.exists(opmObjectMatches(_, d2)))
+    assert(results2.all.exists(opmObjectMatches(_, d3)))
   }
 
   test("search by less than for subsequent query") {
@@ -780,9 +928,14 @@ class MongoTest extends FunSuite with OpmMongoStorage[MongoTest.TestDomain] with
         set(_.name).to("search_lt").
         set(_.description).to("2")
     squashPut(d2)
+
     val results1 = search(_.name).equals("search_lt").search(_.description).lessThan("2")
     assert(results1.all.length == 1)
     assert(opmObjectMatches(results1.all.head, d1))
+
+    val results2 = search(_.name).equals("search_lt").search(_.description).not().lessThan("2")
+    assert(results2.all.length == 1)
+    assert(opmObjectMatches(results2.all.head, d2))
   }
 
   test("search by less than or equal for first query") {
@@ -805,10 +958,15 @@ class MongoTest extends FunSuite with OpmMongoStorage[MongoTest.TestDomain] with
         set(_.description).to("desc")
     squashPut(d3)
 
-    val results = search(_.name).lessThanOrEqual("2").search(_.description).equals("desc")
-    assert(results.all.exists(opmObjectMatches(_, d1)))
-    assert(results.all.exists(opmObjectMatches(_, d2)))
-    assert(!results.all.exists(opmObjectMatches(_, d3)))
+    val results1 = search(_.name).lessThanOrEqual("2").search(_.description).equals("desc")
+    assert(results1.all.exists(opmObjectMatches(_, d1)))
+    assert(results1.all.exists(opmObjectMatches(_, d2)))
+    assert(!results1.all.exists(opmObjectMatches(_, d3)))
+
+    val results2 = search(_.name).not().lessThanOrEqual("2").search(_.description).equals("desc")
+    assert(!results2.all.exists(opmObjectMatches(_, d1)))
+    assert(!results2.all.exists(opmObjectMatches(_, d2)))
+    assert(results2.all.exists(opmObjectMatches(_, d3)))
   }
 
   test("search by less than or equal for subsequent query") {
@@ -825,9 +983,14 @@ class MongoTest extends FunSuite with OpmMongoStorage[MongoTest.TestDomain] with
         set(_.name).to("search_lte").
         set(_.description).to("2")
     squashPut(d2)
+
     val results1 = search(_.name).equals("search_lte").search(_.description).lessThanOrEqual("1")
     assert(results1.all.length == 1)
     assert(opmObjectMatches(results1.all.head, d1))
+
+    val results2 = search(_.name).equals("search_lte").search(_.description).not().lessThanOrEqual("1")
+    assert(results2.all.length == 1)
+    assert(opmObjectMatches(results2.all.head, d2))
   }
 
   test("search with limit succeeds") {

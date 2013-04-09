@@ -13,5 +13,8 @@ import com.giltgroupe.service.commons.mongo.MongoHelper.toMongo
  */
 case class OpmPropertyEquals(property: String, value: Any, valueTranslator: Option[(String, Any) => Any] = None) extends OpmPropertyQuery {
   override def isMatch(obj: Any) = obj == value
-  override def toMongoDBObject(prefix: String = "") = MongoDBObject("%s%s".format(prefix, property) -> toMongo(value, translate(property)))
+
+  override def toMongoDBObject(prefix: String = "", matchInverse: Boolean = false) =
+    if (matchInverse) MongoDBObject("%s%s".format(prefix, property) -> MongoDBObject("$ne" -> toMongo(value, translate(property))))
+    else MongoDBObject("%s%s".format(prefix, property) -> toMongo(value, translate(property)))
 }

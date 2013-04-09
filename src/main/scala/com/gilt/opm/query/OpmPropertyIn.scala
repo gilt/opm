@@ -10,5 +10,8 @@ import com.giltgroupe.service.commons.mongo.MongoHelper._
  */
 case class OpmPropertyIn(property: String, value: Iterable[Any], valueTranslator: Option[(String, Any) => Any] = None) extends OpmPropertyQuery {
   override def isMatch(obj: Any) = value.exists(_ == obj)
-  override def toMongoDBObject(prefix: String = "") = MongoDBObject("%s%s".format(prefix, property) -> MongoDBObject("$in" -> MongoDBList(value.map(toMongo(_, translate(property))).toSeq: _*)))
+
+  override def toMongoDBObject(prefix: String = "", matchInverse: Boolean = false) =
+    if (matchInverse) MongoDBObject("%s%s".format(prefix, property) -> MongoDBObject("$nin" -> MongoDBList(value.map(toMongo(_, translate(property))).toSeq: _*)))
+    else MongoDBObject("%s%s".format(prefix, property) -> MongoDBObject("$in" -> MongoDBList(value.map(toMongo(_, translate(property))).toSeq: _*)))
 }

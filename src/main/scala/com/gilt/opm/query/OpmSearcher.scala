@@ -17,6 +17,8 @@ import com.gilt.opm.{OpmQueryResult, OpmObject, OpmFactory}
  *                    and matching value have been collected. The callback function takes OpmPropertyQuery and returns
  *                    an OpmQueryResult.
  *
+ * @param matchInverse: Match the inverse of the chosen query, i.e. 'not'.
+ *
  * @param valueTranslator: Depending on the storage format, you may need to help it translate the searched-for values.
  *                       For example, Mongo needs clean JSON, which is not necessarily parseable for non-standard
  *                       values. The storage model will have parsed values, but when searching it will need to parse
@@ -24,11 +26,13 @@ import com.gilt.opm.{OpmQueryResult, OpmObject, OpmFactory}
  *                       optionally pass in a translator here. By necessity, this is sprinkled throughout dependent
  *                       classes.
  *
+ * @param stackOverride: Used only by OpmSearcherHelper to immutably create a 'not' query. Generally shouldn't be used.
+ *
  * @author: Ryan Martin
  * @since: 11/2/12 8:38 PM
  */
-case class OpmSearcher[T <: OpmObject : Manifest](finishSearch: OpmPropertyQuery => OpmQueryResult[T], valueTranslator: Option[(String, Any) => Any] = None) {
-  private var stack: mutable.Stack[Scratch] = _
+case class OpmSearcher[T <: OpmObject : Manifest](finishSearch: (OpmPropertyQuery, Boolean) => OpmQueryResult[T], matchInverse: Boolean = false, valueTranslator: Option[(String, Any) => Any] = None, stackOverride: mutable.Stack[Scratch] = null) {
+  private[query] var stack: mutable.Stack[Scratch] = stackOverride
 
   /**
    * This kicks off a search by collecting the object property to be searched against. It uses introspection to capture
@@ -60,7 +64,7 @@ case class OpmSearcher[T <: OpmObject : Manifest](finishSearch: OpmPropertyQuery
    * @param end
    * @return
    */
-  private [query] def between[V <% Ordered[V]](start: V, end: V) = finishSearch(OpmPropertyBetween(property, start, end, valueTranslator))
+  private [query] def between[V <% Ordered[V]](start: V, end: V) = finishSearch(OpmPropertyBetween(property, start, end, valueTranslator), matchInverse)
 
   /**
    * Matches records where property is between start and end, excluding those values.
@@ -69,7 +73,7 @@ case class OpmSearcher[T <: OpmObject : Manifest](finishSearch: OpmPropertyQuery
    * @param end
    * @return
    */
-  private [query] def betweenExcl[V <% Ordered[V]](start: V, end: V) = finishSearch(OpmPropertyBetweenExclusive(property, start, end, valueTranslator))
+  private [query] def betweenExcl[V <% Ordered[V]](start: V, end: V) = finishSearch(OpmPropertyBetweenExclusive(property, start, end, valueTranslator), matchInverse)
 
   /**
    * Matches records where the (array) property contains the given value.
@@ -77,7 +81,7 @@ case class OpmSearcher[T <: OpmObject : Manifest](finishSearch: OpmPropertyQuery
    * @param value
    * @return
    */
-  private [query] def contains[V](value: V) = finishSearch(OpmPropertyContains(property, value, valueTranslator))
+  private [query] def contains[V](value: V) = finishSearch(OpmPropertyContains(property, value, valueTranslator), matchInverse)
 
   /**
    * Matches records where property == value
@@ -85,7 +89,7 @@ case class OpmSearcher[T <: OpmObject : Manifest](finishSearch: OpmPropertyQuery
    * @param value
    * @return
    */
-  private [query] def eql[V](value: V) = finishSearch(OpmPropertyEquals(property, value, valueTranslator))
+  private [query] def eql[V](value: V) = finishSearch(OpmPropertyEquals(property, value, valueTranslator), matchInverse)
 
   /**
    * Matches records where property > value
@@ -93,7 +97,7 @@ case class OpmSearcher[T <: OpmObject : Manifest](finishSearch: OpmPropertyQuery
    * @param value
    * @return
    */
-  private [query] def gt[V <% Ordered[V]](value: V) = finishSearch(OpmPropertyGreaterThan(property, value, valueTranslator))
+  private [query] def gt[V <% Ordered[V]](value: V) = finishSearch(OpmPropertyGreaterThan(property, value, valueTranslator), matchInverse)
 
   /**
    * Matches records where property >= value
@@ -101,7 +105,7 @@ case class OpmSearcher[T <: OpmObject : Manifest](finishSearch: OpmPropertyQuery
    * @param value
    * @return
    */
-  private [query] def gte[V <% Ordered[V]](value: V) = finishSearch(OpmPropertyGreaterThanOrEqual(property, value, valueTranslator))
+  private [query] def gte[V <% Ordered[V]](value: V) = finishSearch(OpmPropertyGreaterThanOrEqual(property, value, valueTranslator), matchInverse)
 
   /**
    * Matches records where property is included in the given array.
@@ -109,7 +113,7 @@ case class OpmSearcher[T <: OpmObject : Manifest](finishSearch: OpmPropertyQuery
    * @param values
    * @return
    */
-  private [query] def in[V](values: Iterable[V]) = finishSearch(OpmPropertyIn(property, values, valueTranslator))
+  private [query] def in[V](values: Iterable[V]) = finishSearch(OpmPropertyIn(property, values, valueTranslator), matchInverse)
 
   /**
    * Matches records in which the property is not defined.
@@ -118,7 +122,7 @@ case class OpmSearcher[T <: OpmObject : Manifest](finishSearch: OpmPropertyQuery
    *
    * @return
    */
-  private [query] def isBlank() = finishSearch(OpmPropertyBlank(property))
+  private [query] def isBlank() = finishSearch(OpmPropertyBlank(property), matchInverse)
 
   /**
    * Matches records where property < value
@@ -126,7 +130,7 @@ case class OpmSearcher[T <: OpmObject : Manifest](finishSearch: OpmPropertyQuery
    * @param value
    * @return
    */
-  private [query] def lt[V <% Ordered[V]](value: V) = finishSearch(OpmPropertyLessThan(property, value, valueTranslator))
+  private [query] def lt[V <% Ordered[V]](value: V) = finishSearch(OpmPropertyLessThan(property, value, valueTranslator), matchInverse)
 
   /**
    * Matches records where property <= value
@@ -134,7 +138,7 @@ case class OpmSearcher[T <: OpmObject : Manifest](finishSearch: OpmPropertyQuery
    * @param value
    * @return
    */
-  private [query] def lte[V <% Ordered[V]](value: V) = finishSearch(OpmPropertyLessThanOrEqual(property, value, valueTranslator))
+  private [query] def lte[V <% Ordered[V]](value: V) = finishSearch(OpmPropertyLessThanOrEqual(property, value, valueTranslator), matchInverse)
 
   /**
    * Collects the introspected type stack into a single string delimited by ".". The assumption is that your datastore
@@ -151,6 +155,8 @@ case class OpmSearcherHelper[T <: OpmObject, V](result: OpmSearcher[T]) {
   def in(v: Iterable[V]) = result.in(v)
 
   def isBlank() = result.isBlank()
+
+  def not() = this.copy[T, V](result.copy[T](matchInverse = true, stackOverride = result.stack))
 }
 
 class OpmSearcherHelperWithIterable[T <: OpmObject, V, U <: Iterable[V]](refer: OpmSearcherHelper[T, U]) {

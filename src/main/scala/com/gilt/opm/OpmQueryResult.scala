@@ -49,7 +49,10 @@ class OpmQueryResult[T <: OpmObject : Manifest](val all: Stream[T], valueTransla
    * @return: Another result object, which can be further chained.
    */
   def search[V](v: T => V): OpmSearcherHelper[T, V] = {
-    OpmSearcher[T](query => search(query), valueTranslator).search(v)
+    OpmSearcher[T](
+      finishSearch = (query, matchInverse) => search(query, matchInverse),
+      valueTranslator = valueTranslator
+    ).search(v)
   }
 
   /**
@@ -58,11 +61,12 @@ class OpmQueryResult[T <: OpmObject : Manifest](val all: Stream[T], valueTransla
    * OpmMongoStorage.search).
    *
    * @param query: The query object to filter against.
+   * @param matchInverse: Match the inverse of the query, i.e. 'not'.
    * @return: Another result object, which can be further chained.
    */
-  def search(query: OpmPropertyQuery) = OpmQueryResult[T](all filter byQuery(query), valueTranslator)
+  def search(query: OpmPropertyQuery, matchInverse: Boolean) = OpmQueryResult[T](all filter byQuery(query, matchInverse), valueTranslator)
 
-  private def byQuery(query: OpmPropertyQuery)(item: T): Boolean = {
+  private def byQuery(query: OpmPropertyQuery, matchInverse: Boolean)(item: T): Boolean = {
     val method = clazz.getMethod(query.property)
     val currentValue = try {
       method.invoke(item)
@@ -74,7 +78,15 @@ class OpmQueryResult[T <: OpmObject : Manifest](val all: Stream[T], valueTransla
         }
       }
     }
-    query.isMatch(currentValue)
+
+    /**
+     * This is XOR, i.e.
+     * match=T, matchInverse=T -> F
+     * match=T, matchInverse=F -> T
+     * match=F, matchInverse=T -> T
+     * match=F, matchInverse=F -> F
+     */
+    query.isMatch(currentValue) != matchInverse
   }
 }
 

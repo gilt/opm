@@ -417,28 +417,31 @@ trait OpmMongoStorage[V <: OpmObject] extends OpmStorage[V] with LockManager {
    * @return: The list of objects that match the query.
    */
   def search[T](v: V => T)(implicit mf: Manifest[V]): OpmSearcherHelper[V, T] = {
-    OpmSearcher[V](query => finishSearch(query), Some((field, value) => mapToMongo(field, value))).search(v)
+    OpmSearcher[V](
+      finishSearch = (query, matchInverse) => finishSearch(query, matchInverse),
+      valueTranslator = Some((field, value) => mapToMongo(field, value))
+    ).search(v)
   }
 
   /**
    * Completes the search process with the query collected by OpmSearcher.
    *
    * @param query: The requested query, as determined by the chained search call.
+   * @param matchInverse: Match the inverse of the query, i.e. 'not'.
    * @param mf
    * @return: A result object that can be further chained for more-detailed searches.
    */
-  private def finishSearch(query: OpmPropertyQuery)(implicit mf: Manifest[V]): OpmQueryResult[V] = {
+  private def finishSearch(query: OpmPropertyQuery, matchInverse: Boolean)(implicit mf: Manifest[V]): OpmQueryResult[V] = {
     // The mongoStream simply pulls the keys of records for which the property matches the given value in either a
     // value or diff record. This may include records that no longer match the query, so the stream is again filtered
     // by the same query once the OPM objects are constructed [the .find(query) below].
-    val mongoStream = collection.distinct(Key,
-      MongoDBObject("$or" -> MongoDBList(
-        query.toMongoDBObject("%s.".format(Instance)),
-        query.toMongoDBObject("%s.".format(Forward))
+    val mongoStream = collection.distinct(Key, MongoDBObject("$or" -> MongoDBList(
+        query.toMongoDBObject("%s.".format(Instance), matchInverse),
+        query.toMongoDBObject("%s.".format(Forward), matchInverse)
       ))).
       toStream.
       flatMap((key: Any) => get(key.toString))
-    OpmQueryResult[V](mongoStream, Some((field, value) => mapToMongo(field, value))).search(query)
+    OpmQueryResult[V](mongoStream, Some((field, value) => mapToMongo(field, value))).search(query, matchInverse)
   }
 
   // deletes all records with the given key, doing nothing if the key doesn't exist.
