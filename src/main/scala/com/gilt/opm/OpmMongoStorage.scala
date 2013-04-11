@@ -115,6 +115,12 @@ trait OpmMongoStorage[V <: OpmObject] extends OpmStorage[V] with LockManager {
   }
 
   private [this] lazy val defaultFromMongoMapper: PartialFunction[(String, Option[Class[_]], AnyRef), AnyRef] = {
+    // BSON can't represent every primitive type, so these have to be handled specially
+    case (_, Some(cls), n: Number) if cls == classOf[Byte] => n.byteValue.asInstanceOf[AnyRef]
+    case (_, Some(cls), s: String) if cls == classOf[Char] && !s.isEmpty => s.charAt(0).asInstanceOf[AnyRef]
+    case (_, Some(cls), n: Number) if cls == classOf[Short] => n.shortValue.asInstanceOf[AnyRef]
+    case (_, Some(cls), n: Number) if cls == classOf[Float] => n.floatValue.asInstanceOf[AnyRef]
+
     case (_, _, s) if s.isInstanceOf[String] => s
     case (_, _, d) if d.isInstanceOf[Date] => d
     case (_, _, u) if u.isInstanceOf[UUID] => u

@@ -20,6 +20,13 @@ object MongoTest {
     def count: Long
     def maybeName: Option[String]
     def maybeLong: Option[Long]
+    def byte: Byte
+    def char: Char
+    def short: Short
+    def int: Int
+    def float: Float
+    def double: Double
+    def maybeFloat: Option[Float]
     def description: String
     def createdAt: Date
     def tags: Seq[String]
@@ -772,18 +779,49 @@ class MongoTest extends FunSuite with OpmMongoStorage[MongoTest.TestDomain] with
     val d1 =
       OpmFactory.instance[TestDomain]("option-squashPut").
         set(_.maybeName).to(Some("a")).
-        set(_.maybeLong).to(Some(100))
+        set(_.maybeLong).to(Some(100L))
     squashPut(d1)
 
     val d2 =
       OpmFactory.instance[TestDomain]("option-squashPut").
         set(_.maybeName).to(Some("b")).
-        set(_.maybeLong).to(Some(200))
+        set(_.maybeLong).to(Some(200L))
     squashPut(d2)
 
     val d3 = get("option-squashPut").get
     assert(d3.maybeName == Some("b"))
-    assert(d3.maybeLong == Some(200))
+    // scala compares boxed primitives using type coercion when == is used, so avoid that
+    assert(d3.maybeLong.isDefined && !(d3.maybeLong.get equals 200))
+    assert(d3.maybeLong.isDefined && (d3.maybeLong.get equals 200L))
+  }
+
+  test("primitive types work") {
+    val d1 =
+      OpmFactory.instance[TestDomain]("non-bson").
+        set(_.count).to(1L).
+        set(_.byte).to(66: Byte).
+        set(_.char).to('a').
+        set(_.short).to(23: Short).
+        set(_.int).to(57).
+        set(_.float).to(0.1F).
+        set(_.double).to(0.2).
+        set(_.maybeFloat).to(Some(0.3F)).
+        prune
+    put(d1)
+
+    val d2 = get("non-bson").get
+
+    assert(d2.count equals 1L)
+    assert(d2.byte equals (66: Byte))
+    assert(d2.char equals 'a')
+    assert(d2.short equals (23: Short))
+    assert(d2.int equals 57)
+    assert(d2.float equals 0.1F)
+    assert(d2.double equals 0.2)
+
+    // Containers of some types don't work yet
+    assert(d2.maybeFloat.isDefined && !(d2.maybeFloat.get equals 0.3F))
+    assert(d2.maybeFloat.isDefined && d2.maybeFloat.get.isInstanceOf[Double])
   }
 
   test("update a non-String via squashPut succeeds") {
