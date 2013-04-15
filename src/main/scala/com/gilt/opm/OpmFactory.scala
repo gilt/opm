@@ -190,8 +190,11 @@ object OpmFactory extends OpmFactory {
         case (any@Some(_), None) => Some(Diff(field, any))
         // If pending flag has expired, set to whatever is given
         case (any, Some(OpmField(oldVal, Some(oldPending)))) if (oldPending < NanoTimestamp.now) => Some(Diff(field, any))
-        // If the value is an Option set to None, set to whatever is given
-        case (any, Some(OpmField(None, _))) => Some(Diff(field, any))
+
+        // If the value was None and is now Some or pending, set to whatever is given
+        case (any@Some(OpmField(Some(_), _)), Some(OpmField(None, _))) => Some(Diff(field, any))
+        case (any@Some(OpmField(_, Some(_))), Some(OpmField(None, _))) => Some(Diff(field, any))
+
         // If pending has been turned off and the value is missing, leave the value if already set
         case (Some(OpmField(null, None)), Some(OpmField(any, None))) => None
         // If pending has been turned off and the value is missing, simply remove the value for pending

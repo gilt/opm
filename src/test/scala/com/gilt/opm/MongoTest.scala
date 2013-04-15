@@ -801,6 +801,45 @@ class MongoTest extends FunSuite with OpmMongoStorage[MongoTest.TestDomain] with
     assert(d3.count == 200)
   }
 
+  test("a loaded object with history returns empty options properly") {
+    val d1 =
+      OpmFactory.instance[TestDomain]("option-history").
+        set(_.count).to(100).
+        set(_.maybeLong).to(None).
+        prune
+    put(d1)
+
+    val d2 = get("option-history")
+    assert(d2.isDefined)
+    assert(d2.get.count == 100)
+    assert(d2.get.maybeLong == None)
+
+    put(d2.get.set(_.description).to("test"))
+
+    val d3 = get("option-history")
+    assert(d3.isDefined)
+    assert(d3.get.count == 100)
+    assert(d3.get.description == "test")
+    assert(d3.get.maybeLong == None)
+  }
+
+  test("setting a property from Some to None works properly") {
+    val d1 = OpmFactory.instance[TestDomain]("option-set-to-none").
+      set(_.maybeLong).to(Some(100L)).
+      prune
+    put(d1)
+
+    val d2 = get("option-set-to-none")
+    assert(d2.isDefined)
+    assert(d2.get.maybeLong == Some(100L))
+
+    put(d2.get.set(_.maybeLong).to(None))
+
+    val d3 = get("option-set-to-none")
+    assert(d3.isDefined)
+    assert(d3.get.maybeLong == None)
+  }
+
   test("evolve from trait succeeds in writing to Mongo") {
     import MongoTest.TestClass
     val d1 =

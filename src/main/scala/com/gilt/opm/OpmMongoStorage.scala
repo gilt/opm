@@ -460,13 +460,32 @@ trait OpmMongoStorage[V <: OpmObject] extends OpmStorage[V] with LockManager {
   private [this] def objToDiffSet(obj: MongoDBObject, clazz: Class[_], direction: String): Set[Diff] = {
     require(direction == Forward || direction == Reverse,
       "direction must be either %s or %s; was %s".format(Forward, Reverse, direction))
-    val diffIterable = wrapDBObj(obj.as[DBObject](direction)).map {
-      case (key: String, null) => Diff(key, None)
-      case (key: String, value: Any) =>
-        val valueType =
-          if (OpmIntrospection.MetaFields.contains(key)) None
-          else Some(clazz.getMethod(key).getReturnType)
-        Diff(key, Some(mapFromMongo(key, valueType, value)))
+
+    val diffIterable = wrapDBObj(obj.as[DBObject](direction)).map {case (key, value) =>
+      val valueType = if (OpmIntrospection.MetaFields.contains(key)) None
+      else Some(clazz.getMethod(key).getReturnType)
+
+      value match {
+        /* Unfortunately, a mapping from key to null can mean one of several things:
+         *  - a. (in a forwards diff) a non-Option value was removed from the model entirely
+         *  - b. (in a forwards diff) an Option value was removed from the model entirely
+         *  - c. (in a forwards diff) an Option was set from Some to None
+         *  - d. (in a reverse diff) a non-Option value was added to the model
+         *  - e. (in a reverse diff) an Option value was added to the model
+         *  - f. (in a reverse diff) an Option was set from None to Some
+         * I can't handle (e) without breaking (f), so if a reverse diff is used to contruct a
+         * previous version from before the addition of an Option value, accessing that value
+         * will return None rather then throw NoSuchMethodException. This actually seems like the
+         * correct behavior.
+         */
+        case null if valueType.isEmpty || !valueType.get.isAssignableFrom(classOf[Option[_]]) =>
+          Diff(key, None) // (a), (b), (d)
+        case null =>
+          Diff(key, Some(OpmField(None)))   // (c), (e), (f)
+
+        case value: Any =>
+          Diff(key, Some(mapFromMongo(key, valueType, value)))
+      }
     }
     diffIterable.toSet
   }
