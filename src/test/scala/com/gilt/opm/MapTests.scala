@@ -24,7 +24,8 @@ class MapTests extends FunSuite with OpmMongoStorage[MapTests.MapObject] with Co
   test("simple map-based object can be stored & retrieved") {
     val mapObj = instance[MapObject]("a", Map("map" -> Map.empty))
 
-    val obj = mapObj.set(_.map) := Map("now" -> System.currentTimeMillis(), "then" -> (System.currentTimeMillis - 10))
+    val now = System.currentTimeMillis()
+    val obj = mapObj.set(_.map) := Map("now" -> now, "then" -> (now - 10))
 
     put(obj)
 
