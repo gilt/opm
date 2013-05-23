@@ -1,10 +1,10 @@
 package com.gilt.opm
 
-import com.mongodb.casbah._
+import com.mongodb.casbah.Imports._
 import com.mongodb.casbah.Implicits._
 import com.mongodb.casbah.commons.Implicits.wrapDBObj
 import com.mongodb.casbah.{WriteConcern => CWriteConcern}
-import commons.{MongoDBList, MongoDBObject}
+import com.mongodb.casbah.commons.{MongoDBList, MongoDBObject}
 import com.mongodb.DBObject
 import java.util.{ConcurrentModificationException, UUID, Date}
 import lock.LockManager

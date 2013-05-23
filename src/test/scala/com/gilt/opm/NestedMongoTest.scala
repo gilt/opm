@@ -143,7 +143,7 @@ class NestedOpmMongoTest extends FunSuite with OpmMongoStorage[NestedMongoTest.O
 class NestedNonMongoTest extends FunSuite with OpmMongoStorage[NestedMongoTest.OpmA] with CollectionHelper {
   import NestedMongoTest._
   import OpmFactory._
-  import com.mongodb.casbah._
+  import com.mongodb.casbah.Imports._
   import com.mongodb.casbah.commons.MongoDBObject
   import com.mongodb.casbah.Implicits._
   import com.mongodb.casbah.commons.Implicits.wrapDBObj

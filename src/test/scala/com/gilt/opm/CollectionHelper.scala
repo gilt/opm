@@ -22,13 +22,13 @@ trait CollectionHelper {
   lazy val collection = {
     val col = MongoConnection()(CollectionHelper.databaseName)(collectionName)
     col.drop()
-    info("Dropped %s, size = %s".format(col, col.count))
+    info("Dropped %s, size = %s".format(col, col.size))
     col
   }
   lazy val locks = {
     val col = MongoConnection()(CollectionHelper.databaseName)(collectionName + "_locks")
     col.drop()
-    info("Dropped %s, size = %s".format(col, col.count))
+    info("Dropped %s, size = %s".format(col, col.size))
     col
   }
 }

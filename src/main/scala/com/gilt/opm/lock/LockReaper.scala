@@ -6,7 +6,7 @@ import com.giltgroupe.util.RichLongForMeasurement._
 import java.util.concurrent.TimeUnit.MILLISECONDS
 import com.giltgroupe.util.Loggable
 
-import com.mongodb.casbah._
+import com.mongodb.casbah.Imports._
 import java.util.concurrent.atomic.AtomicInteger
 import java.lang.Thread.UncaughtExceptionHandler
 

@@ -2,7 +2,7 @@ package com.gilt.opm.storage
 
 import com.gilt.opm._
 import com.giltgroupe.util.{CompactGuid, Timestamp}
-import com.mongodb.casbah.commons._
+import com.mongodb.casbah.commons.Imports._
 
 /**
  * Adds support for storing {@link CompactGuid} and {@link Timestamp} members of an

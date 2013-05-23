@@ -1,6 +1,6 @@
 package com.gilt.opm.lock
 
-import com.mongodb.casbah._
+import com.mongodb.casbah.Imports._
 import annotation.tailrec
 import com.giltgroupe.util.Loggable
 import java.util.concurrent.ConcurrentHashMap

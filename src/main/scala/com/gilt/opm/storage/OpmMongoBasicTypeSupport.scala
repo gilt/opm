@@ -1,7 +1,7 @@
 package com.gilt.opm.storage
 
 import com.gilt.opm._
-import com.mongodb.casbah.commons._
+import com.mongodb.casbah.commons.Imports._
 import java.net.InetAddress
 
 /**
