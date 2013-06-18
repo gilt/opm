@@ -1,7 +1,7 @@
 package com.gilt.opm.storage
 
 import com.gilt.opm.OpmFactory._
-import com.gilt.opm.{CollectionHelper, OpmObject}
+import com.gilt.opm.{OpmMongoStorage, CollectionHelper, OpmObject}
 import com.giltgroupe.util.{CompactGuid, Timestamp}
 import org.scalatest.FlatSpec
 import org.scalatest.matchers.ShouldMatchers
@@ -17,7 +17,7 @@ object OpmMongoGiltTypeSupportSpec {
 import OpmMongoGiltTypeSupportSpec._
 
 class OpmMongoGiltTypeSupportSpec
-extends FlatSpec with ShouldMatchers with OpmMongoGiltTypeSupport[GiltTypes] with CollectionHelper {
+extends FlatSpec with ShouldMatchers with OpmMongoStorage[GiltTypes] with OpmMongoGiltTypeSupport with CollectionHelper {
   val collectionName = "gilt_types"
 
   "OpmMongoGiltTypeSupport" should "allow extra gilt types to be stored and loaded" in {

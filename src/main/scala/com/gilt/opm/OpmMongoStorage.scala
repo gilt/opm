@@ -10,6 +10,7 @@ import java.util.{ConcurrentModificationException, UUID, Date}
 import lock.LockManager
 import org.bson.types.BasicBSONList
 import query._
+import storage.MongoMapper
 
 /**
  * Mixing to provide mongo storage for OpmObjects.
@@ -26,7 +27,7 @@ import query._
  * @since 8/22/12 12:18 PM
  */
 
-trait OpmMongoStorage[V <: OpmObject] extends OpmStorage[V] with LockManager {
+trait OpmMongoStorage[V <: OpmObject] extends OpmStorage[V] with MongoMapper with LockManager  {
 
   import OpmFactory._
   import OpmIntrospection.{TimestampField, ClassField, MetaFields}
@@ -38,10 +39,10 @@ trait OpmMongoStorage[V <: OpmObject] extends OpmStorage[V] with LockManager {
   private implicit lazy val _writeConcern = writeConcern
 
   def wavelength: Int = 5           // value frame + (wavelength - 1) diff frames
-  def toMongoMapper: OpmToMongoMapper = None
+  def toMongoMapper: OpmToMongoMapper = noOpMongoMapper
   // Note: If a field is an Option, this class will wrap it correctly; in fromMongoMapper, you only need to map to the
   // base class. If you include the Option, you'll end up with something like this: Some(Some(...)) instead of Some(...).
-  def fromMongoMapper: OpmFromMongoMapper = None
+  def fromMongoMapper: OpmFromMongoMapper = noOpMongoMapper
 
   private [this] lazy val defaultToMongoMapper: PartialFunction[(String, Option[Class[_]], AnyRef), AnyRef] = {
     case (f, _, s) if s.isInstanceOf[String] => s
@@ -196,7 +197,7 @@ trait OpmMongoStorage[V <: OpmObject] extends OpmStorage[V] with LockManager {
     value match {
       case OpmField(_, Some(pending)) => MongoDBObject(Pending -> pending.time)
       case OpmField(ref: AnyRef, None) =>
-        (toMongoMapper.map(_ orElse defaultToMongoMapper orElse identity).getOrElse(defaultToMongoMapper orElse identity))((field, fieldType, ref))
+        (toMongoMapper orElse defaultToMongoMapper orElse identity)((field, fieldType, ref))
       case OpmField(anyVal, None) =>
         anyVal
     }
@@ -214,7 +215,7 @@ trait OpmMongoStorage[V <: OpmObject] extends OpmStorage[V] with LockManager {
 
     if (value.isInstanceOf[DBObject] && !value.isInstanceOf[BasicBSONList] && wrapDBObj(value.asInstanceOf[DBObject]).contains(Pending)) OpmField(null, Some(NanoTimestamp(wrapDBObj(value.asInstanceOf[DBObject]).get(Pending).get.asInstanceOf[Long])))
     else OpmField(Option(value).map { _ =>
-      val result = fromMongoMapper.map(_ orElse defaultFromMongoMapper orElse identity).getOrElse(defaultFromMongoMapper orElse identity)(field, fieldType, value.asInstanceOf[AnyRef])
+      val result = (fromMongoMapper orElse defaultFromMongoMapper orElse identity)(field, fieldType, value.asInstanceOf[AnyRef])
       Option(result).map { _ =>
         if (isOption)  Some(result) else result
       }.getOrElse {

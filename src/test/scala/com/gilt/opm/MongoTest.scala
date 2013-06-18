@@ -66,20 +66,12 @@ object MongoTest {
   object TestClassAudited extends OpmAuditedMongoStorage[TestClassAudited, GUID] with CollectionHelper {
     override val collectionName = "opm_test_class"
 
-    override def toMongoMapper: Option[PartialFunction[(String, Option[Class[_]], AnyRef), AnyRef]] = {
-      Some {
-        {
-          case (OpmIntrospection.UpdatedByField, _, Some(guid)) => guid.toString
-        }
-      }
+    override def toMongoMapper: OpmToMongoMapper = {
+      case (OpmIntrospection.UpdatedByField, _, Some(guid)) => guid.toString
     }
 
-    override def fromMongoMapper: Option[PartialFunction[(String, Option[Class[_]], AnyRef), AnyRef]] = {
-      Some {
-        {
-          case (OpmIntrospection.UpdatedByField, _, str) => new GUID(str.toString)
-        }
-      }
+    override def fromMongoMapper: OpmFromMongoMapper = {
+      case (OpmIntrospection.UpdatedByField, _, str) => new GUID(str.toString)
     }
   }
 
@@ -90,22 +82,14 @@ class MongoTest extends FunSuite with OpmMongoStorage[MongoTest.TestDomain] with
   import OpmFactory._
   override val collectionName = "opm"
 
-  override def toMongoMapper: Option[PartialFunction[(String, Option[Class[_]], AnyRef), AnyRef]] = {
-    Some {
-      {
-        case ("guid", _, guid) => guid.toString
-        case ("other_guid", _, guid@Some(g)) => "xx" + g.toString + "xx"
-      }
-    }
+  override def toMongoMapper: OpmToMongoMapper = {
+    case ("guid", _, guid) => guid.toString
+    case ("other_guid", _, Some(guid)) => "xx" + guid.toString + "xx"
   }
 
-  override def fromMongoMapper: Option[PartialFunction[(String, Option[Class[_]], AnyRef), AnyRef]] = {
-    Some {
-      {
-        case ("guid", _, str) => CompactGuid.apply[TestDomain](str.toString)
-        case ("other_guid", _, str) => CompactGuid.apply[TestDomain](str.toString.drop(2).dropRight(2))
-      }
-    }
+  override def fromMongoMapper: OpmFromMongoMapper = {
+    case ("guid", _, str) => CompactGuid.apply[TestDomain](str.toString)
+    case ("other_guid", _, str) => CompactGuid.apply[TestDomain](str.toString.drop(2).dropRight(2))
   }
 
   test("write 1000") {

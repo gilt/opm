@@ -34,38 +34,30 @@ class MongoTestWithCustomMappers extends FunSuite with OpmMongoStorage[MongoTest
   override val collectionName = "opm_custom_mappers"
 
   override def toMongoMapper: OpmToMongoMapper = {
-    Some {
-      {
-        case ("id", _, str) => str.asInstanceOf[Long].asInstanceOf[AnyRef]
-        case ("createdAt", _, ts) => ts.asInstanceOf[Date].getTime.asInstanceOf[AnyRef]
-        case ("updatedAt", _, ts) => ts.asInstanceOf[Option[Date]].map(_.getTime.asInstanceOf[AnyRef])
-        case ("startMonth", _, mon@Month(_, _)) => MongoDBObject("month" -> mon.month, "year" -> mon.year)
-        case ("endMonth", _, mon@Month(_, _)) => MongoDBObject("month" -> mon.month, "year" -> mon.year)
-        case ("name", _, str) => str
-        case ("tags", _, set) => {
-          val b = MongoDBList.newBuilder
-          set.asInstanceOf[Seq[_]].foreach(k => b += k)
-          b.result()
-        }
-      }
+    case ("id", _, str) => str.asInstanceOf[Long].asInstanceOf[AnyRef]
+    case ("createdAt", _, ts) => ts.asInstanceOf[Date].getTime.asInstanceOf[AnyRef]
+    case ("updatedAt", _, ts) => ts.asInstanceOf[Option[Date]].map(_.getTime.asInstanceOf[AnyRef])
+    case ("startMonth", _, Month(month, year)) => MongoDBObject("month" -> month, "year" -> year)
+    case ("endMonth", _, Month(month, year)) => MongoDBObject("month" -> month, "year" -> year)
+    case ("name", _, str) => str
+    case ("tags", _, set) => {
+      val b = MongoDBList.newBuilder
+      set.asInstanceOf[Seq[_]].foreach(k => b += k)
+      b.result()
     }
   }
 
+  def m(obj: Any): MongoDBObject = wrapDBObj(obj.asInstanceOf[DBObject])
   override def fromMongoMapper: OpmFromMongoMapper = {
-    def m(obj: Any): MongoDBObject = wrapDBObj(obj.asInstanceOf[DBObject])
-    Some {
-      {
-        case ("id", _, str) => str.asInstanceOf[java.lang.Long]
-        case ("createdAt", _, str) => new Date(str.asInstanceOf[Long])
-        case ("updatedAt", _, str) => new Date(str.asInstanceOf[Long])
-        case ("startMonth", _, dbObj) => Month(month = m(dbObj).as[Int]("month"), year = m(dbObj).as[Int]("year"))
-        case ("endMonth", _, dbObj) => Month(month = m(dbObj).as[Int]("month"), year = m(dbObj).as[Int]("year"))
-        case ("name", _, str) => str
-        case ("tags", _, dbObj) => {
-          val list = dbObj.asInstanceOf[BasicDBList]
-          Seq[String]() ++ list.toArray.map(_.toString)
-        }
-      }
+    case ("id", _, str) => str.asInstanceOf[java.lang.Long]
+    case ("createdAt", _, str) => new Date(str.asInstanceOf[Long])
+    case ("updatedAt", _, str) => new Date(str.asInstanceOf[Long])
+    case ("startMonth", _, dbObj) => Month(month = m(dbObj).as[Int]("month"), year = m(dbObj).as[Int]("year"))
+    case ("endMonth", _, dbObj) => Month(month = m(dbObj).as[Int]("month"), year = m(dbObj).as[Int]("year"))
+    case ("name", _, str) => str
+    case ("tags", _, dbObj) => {
+      val list = dbObj.asInstanceOf[BasicDBList]
+      Seq[String]() ++ list.toArray.map(_.toString)
     }
   }
 

@@ -1,7 +1,7 @@
 package com.gilt.opm.storage
 
 import com.gilt.opm.OpmFactory._
-import com.gilt.opm.{CollectionHelper, OpmObject}
+import com.gilt.opm.{OpmMongoStorage, CollectionHelper, OpmObject}
 import org.scalatest.FlatSpec
 import org.scalatest.matchers.ShouldMatchers
 
@@ -29,7 +29,7 @@ object OpmMongoEnumerationSupportSpec {
 import OpmMongoEnumerationSupportSpec._
 
 class OpmMongoEnumerationSupportSpec
-extends FlatSpec with ShouldMatchers with OpmMongoEnumerationSupport[WithEnums] with CollectionHelper {
+extends FlatSpec with ShouldMatchers with OpmMongoStorage[WithEnums] with OpmMongoEnumerationSupport with CollectionHelper {
   val collectionName = "enumerations"
 
   "OpmMongoEnumerationSupport" should "allow enumerations to be stored and loaded" in {

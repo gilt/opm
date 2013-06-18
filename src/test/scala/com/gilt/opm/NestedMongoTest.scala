@@ -150,35 +150,31 @@ class NestedNonMongoTest extends FunSuite with OpmMongoStorage[NestedMongoTest.O
 
   override val collectionName = "nested-non-opm"
 
-  override def toMongoMapper: OpmToMongoMapper =
-    Some {
-      {
-        case maybeB if maybeB._3.isInstanceOf[B] => {
-          val b = maybeB._3.asInstanceOf[B]
-          val fields = Seq(Some("name" -> b.name), b.c.map(
-            c => "c" -> MongoDBObject("name" -> c.name, "d" -> MongoDBObject("name" -> c.d.name)))).flatten
-          MongoDBObject(fields:_*)
-        }
-      }
+  override def toMongoMapper: OpmToMongoMapper = {
+    case maybeB if maybeB._3.isInstanceOf[B] => {
+      val b = maybeB._3.asInstanceOf[B]
+      val fields = Seq(Some("name" -> b.name), b.c.map(
+        c => "c" -> MongoDBObject("name" -> c.name, "d" -> MongoDBObject("name" -> c.d.name)))).flatten
+      MongoDBObject(fields:_*)
     }
-  override def fromMongoMapper: OpmFromMongoMapper = Some(
-    {
-      case maybeB if maybeB._1 == "b" =>
-        val m = wrapDBObj(maybeB._3.asInstanceOf[DBObject])
-          BImpl(
-            name = m.as[String]("name"),
-            c = {
-              val c = m.getAs[BasicDBObject]("c")
-              c.map {
-                cObj => CImpl(name = cObj.get("name").toString, d = {
-                  val dObj = cObj.get("d").asInstanceOf[BasicDBObject]
-                  DImpl(name = dObj.get("name").toString)
-                })
-              }
+  }
+
+  override def fromMongoMapper: OpmFromMongoMapper = {
+    case maybeB if maybeB._1 == "b" =>
+      val m = wrapDBObj(maybeB._3.asInstanceOf[DBObject])
+        BImpl(
+          name = m.as[String]("name"),
+          c = {
+            val c = m.getAs[BasicDBObject]("c")
+            c.map {
+              cObj => CImpl(name = cObj.get("name").toString, d = {
+                val dObj = cObj.get("d").asInstanceOf[BasicDBObject]
+                DImpl(name = dObj.get("name").toString)
+              })
             }
-            )
+          }
+        )
     }
-  )
 
   test("non-OpmObject nesting") {
     val d = DImpl(name = "Hi, I'm a D.")

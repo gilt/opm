@@ -9,25 +9,19 @@ import com.mongodb.casbah.commons.Imports._
  * {@link OpmObject} to MongoDB. You can mix in this trait on its own or alongside any other support
  * traits.
  */
-trait OpmMongoGiltTypeSupport[T <: OpmObject] extends OpmMongoStorage[T] {
-  override def toMongoMapper: OpmToMongoMapper = Some {
+trait OpmMongoGiltTypeSupport extends MongoMapper {
+  private val mapTo: OpmToMongoMapper = {
     case (_, _, g: CompactGuid[_]) => MongoDBObject("_guid" -> g.toString)
 
     case (_, _, t: Timestamp) => MongoDBObject("_ts" -> t.getTime)
-
-    case args if super.toMongoMapper.isDefined && super.toMongoMapper.get.isDefinedAt(args) => {
-      super.toMongoMapper.get.apply(args)
-    }
   }
+  abstract override def toMongoMapper: OpmToMongoMapper = mapTo orElse super.toMongoMapper
 
-  override def fromMongoMapper: OpmFromMongoMapper = Some {
+  private val mapFrom: OpmFromMongoMapper = {
     case (_, _, o: BasicDBObject) if o.contains("_guid") => CompactGuid[AnyRef](o("_guid").toString)
 
     case (_, _, o: BasicDBObject) if o.contains("_ts") && o("_ts").isInstanceOf[Number] =>
       new Timestamp(o("_ts").asInstanceOf[Number].longValue)
-
-    case args if super.fromMongoMapper.isDefined && super.fromMongoMapper.get.isDefinedAt(args) => {
-      super.fromMongoMapper.get.apply(args)
-    }
   }
+  abstract override def fromMongoMapper: OpmFromMongoMapper = mapFrom orElse super.fromMongoMapper
 }
