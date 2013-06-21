@@ -1,4 +1,6 @@
 target/
 .idea
 .idea_modules
-
+.cache
+.classpath
+.project
