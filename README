@@ -1,0 +1,11 @@
+
+Object Prevalence Model (OPM)
+
+OPM does to data what functional programming did to state - data are immutable.
+
+OPM is a DSL and runtime for managing durable object state as a timeline of changes. Sort of like
+a 'git for data models', OPM allows all previous versions of an object to be recoverable. OPM
+has also shown a number of nice features beyond simple immutable timelines such as: a clean
+abstraction for auditing changes, a novel approach to managing state machine for distributed
+interaction and a new way to apply the builder pattern without case classes.
+
