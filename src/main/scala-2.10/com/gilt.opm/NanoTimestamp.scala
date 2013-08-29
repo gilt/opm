@@ -1,11 +1,10 @@
 package com.gilt.opm
 
-import org.codehaus.jackson.annotate.JsonCreator
-import org.codehaus.jackson.annotate.JsonValue
 import com.giltgroupe.util.Timestamp
 import com.giltgroupe.util.RichLongForMeasurement._
 import com.giltgroupe.util.MeasurementLong._
 import com.giltgroupe.util.time.MonotonicClock
+import com.fasterxml.jackson.annotation.{JsonCreator, JsonValue}
 
 /**
  * Immutable wrapper around a timestamp.  Represents time the same as {@link com.giltgroupe.util.time.MonotonicClock},

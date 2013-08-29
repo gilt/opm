@@ -138,7 +138,7 @@ trait OpmMongoStorage[V <: OpmObject] extends OpmStorage[V] with MongoMapper wit
       // special object, and behaving specially if it's found, and falling back to previous
       // behaviour if it is not.  This is tested by ComplexCollectionTest.
       import scala.collection.JavaConverters._
-      val loadedSeq = iter.asInstanceOf[BasicBSONList].asScala.toIndexedSeq[AnyRef]
+      val loadedSeq = iter.asInstanceOf[BasicBSONList].asScala.toIndexedSeq
       val cts: (Option[String], IndexedSeq[AnyRef]) = loadedSeq.headOption.map {
         case obj: BasicDBObject if wrapDBObj(obj).get("_t_").isDefined =>
           (Some(obj.get("_t_").toString), loadedSeq.tail)
@@ -325,7 +325,7 @@ trait OpmMongoStorage[V <: OpmObject] extends OpmStorage[V] with MongoMapper wit
     val initialDiffs = mongoStream.takeWhile(_.as[String](Type) == DiffType)
     mongoStream.dropWhile(_.as[String](Type) == DiffType).headOption.flatMap {
       lastValueObj =>
-        val lastValue = toOpmProxy(key, lastValueObj)
+        val lastValue = toOpmProxy(key, lastValueObj.asDBObject)
 
         // We have to look forwards in time if there is a set of diffs right at the tip of the
         // mongo record stream; so special processing to assemble those from the first value object,
@@ -468,7 +468,7 @@ trait OpmMongoStorage[V <: OpmObject] extends OpmStorage[V] with MongoMapper wit
     cursorStream.headOption.map {
       prevObj =>
         if (prevObj.as[String](Type) == ValueType) {
-          val prev = toOpmProxy(key, prevObj)
+          val prev = toOpmProxy(key, prevObj.asDBObject)
           prev #:: loadStream(key, prev, cursorStream.tail, clazz)
         } else {
           assert(prevObj.as[String](Type) == DiffType, "Unknown type: %s".format(prevObj))

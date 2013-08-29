@@ -148,7 +148,7 @@ case class OpmSearcher[T <: OpmObject : Manifest](finishSearch: (OpmPropertyQuer
   private lazy val property: String = stack.foldLeft("")((acc, item) => "%s%s%s".format(item.field, if (acc == "") "" else ".", acc))
 }
 
-case class OpmSearcherHelper[T <: OpmObject, V](result: OpmSearcher[T]) {
+case class OpmSearcherHelper[T <: OpmObject, V](result: OpmSearcher[T])(implicit mf: Manifest[T]) {
   def equals(v: V) = result.eql(v)
   def ===(v: V) = this.equals(v)
 
@@ -164,21 +164,21 @@ class OpmSearcherHelperWithIterable[T <: OpmObject, V, U <: Iterable[V]](refer: 
 }
 
 class OrderedOpmSearcherHelper[T <: OpmObject, V <% Ordered[V]](refer: OpmSearcherHelper[T, V]) {
-  def between(start: V, end: V)(implicit f : V => Ordered[V]) = refer.result.between(start, end)
+  def between(start: V, end: V) = refer.result.between(start, end)
 
-  def betweenExclusive(start: V, end: V)(implicit f : V => Ordered[V]) = refer.result.betweenExcl(start, end)
+  def betweenExclusive(start: V, end: V) = refer.result.betweenExcl(start, end)
 
-  def gt(v: V)(implicit f : V => Ordered[V]) = refer.result.gt(v)
-  def greaterThan(v: V)(implicit f : V => Ordered[V]) = this.gt(v)
+  def gt(v: V) = refer.result.gt(v)
+  def greaterThan(v: V) = this.gt(v)
 
-  def gte(v: V)(implicit f : V => Ordered[V]) = refer.result.gte(v)
-  def greaterThanOrEqual(v: V)(implicit f : V => Ordered[V]) = this.gte(v)
+  def gte(v: V) = refer.result.gte(v)
+  def greaterThanOrEqual(v: V) = this.gte(v)
 
-  def lt(v: V)(implicit f : V => Ordered[V]) = refer.result.lt(v)
-  def lessThan(v: V)(implicit f : V => Ordered[V]) = this.lt(v)
+  def lt(v: V) = refer.result.lt(v)
+  def lessThan(v: V) = this.lt(v)
 
-  def lte(v: V)(implicit f : V => Ordered[V]) = refer.result.lte(v)
-  def lessThanOrEqual(v: V)(implicit f : V => Ordered[V]) = this.lte(v)
+  def lte(v: V) = refer.result.lte(v)
+  def lessThanOrEqual(v: V) = this.lte(v)
 }
 
 object OpmSearcherHelper {
