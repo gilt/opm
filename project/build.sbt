@@ -1,1 +1,1 @@
-addSbtPlugin("com.giltgroupe" % "gilt-sbt-build" % "2.5.0")
+addSbtPlugin("com.giltgroupe" % "gilt-sbt-build" % "2.6.1")
