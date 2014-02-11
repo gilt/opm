@@ -417,7 +417,7 @@ trait OpmMongoStorage[V <: OpmObject] extends OpmStorage[V] with MongoMapper wit
   /**
    * Kicks off a search process. The fully-chained search looks like this: search(_.propertyName).equals("value")
    *
-   * This uses the defined to-mongo mapping to help translate searched-for values. For example, CompactGuid can't be
+   * This uses the defined to-mongo mapping to help translate searched-for values. For example, Gilt Guid's can't be
    * deserialized to JSON without defining toMongoMapper; search makes use of this since it's here already.
    *
    * @see com.gilt.opm.query.OpmSearcher

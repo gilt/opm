@@ -9,3 +9,13 @@ has also shown a number of nice features beyond simple immutable timelines such 
 abstraction for auditing changes, a novel approach to managing state machine for distributed
 interaction and a new way to apply the builder pattern without case classes.
 
+
+Cautionary note about Gilt GUID's
+=================================
+
+OPM 0.x : OpmMongoGiltTypeSupport supports Gilt CompactGuid's but does not support commons-type guid's
+
+OPM 1.x:  OpmMongoGiltTypeSupport supports commons-type guid's but does not support Gilt CompactGuid's
+
+When you migrate from OPM 0.x to OPM 1.x you may need convert from CompactGuid's to commons-type guid's in your application source code.
+

@@ -3,7 +3,8 @@ package com.gilt.opm.storage
 import org.scalatest.FunSpec
 import com.gilt.opm.{OpmMongoStorage, CollectionHelper, OpmObject}
 import org.scalatest.matchers.ShouldMatchers
-import com.giltgroupe.util.{Timestamp, CompactGuid}
+import com.giltgroupe.util.Timestamp
+import com.giltgroupe.typed.Guid
 import com.gilt.opm.OpmFactory._
 
 /**
@@ -18,7 +19,7 @@ object OpmMongoChainedTypeSupportSpec {
   trait ChainedTypes extends OpmObject {
     def bigInt: BigInt
     def bigDecimal: BigDecimal
-    def compactGuid: CompactGuid[ChainedTypes]
+    def typedGuid: Guid[ChainedTypes]
     def timestamp: Timestamp
     def testEnum: TestEnum.Value
     def testEnum_named: TestEnum.Value
@@ -44,7 +45,7 @@ class OpmMongoChainedTypeSupportSpec
         .set(_.bigDecimal).to(BigDecimal(1) / 3)
         .set(_.testEnum).to(TestEnum.V)
         .set(_.testEnum_named).to(TestEnum.V_NAMED)
-        .set(_.compactGuid).to(CompactGuid.randomCompactGuid[ChainedTypes])
+        .set(_.typedGuid).to(Guid.randomGuid[ChainedTypes])
         .set(_.timestamp).to(new Timestamp())
       put(ct)
       val loaded = get("key")
