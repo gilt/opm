@@ -44,8 +44,6 @@ trait OpmMongoStorage[V <: OpmObject] extends OpmStorage[V] with MongoMapper wit
   // base class. If you include the Option, you'll end up with something like this: Some(Some(...)) instead of Some(...).
   def fromMongoMapper: OpmFromMongoMapper = noOpMongoMapper
 
-  def ensureIndexes() = OpmMongoStorage.ensureIndexes(collection)
-
   private [this] lazy val defaultToMongoMapper: PartialFunction[(String, Option[Class[_]], AnyRef), AnyRef] = {
     case (f, _, s) if s.isInstanceOf[String] => s
     case (f, _, d) if d.isInstanceOf[Date] => d
@@ -632,11 +630,6 @@ object OpmMongoStorage {
   // Turn back!
   val ValueType = "v"
   val DiffType = "d"
-
-  def ensureIndexes(collection: MongoCollection) {
-    collection.ensureIndex(Map(Key -> 1))
-    collection.ensureIndex(Map(Timestamp -> -1, Type -> 1))
-  }
 }
 
 trait OpmAuditedMongoStorage[T <: OpmAuditedObject[U], U] extends OpmMongoStorage[T] with OpmAuditedStorage[T,U]
