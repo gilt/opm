@@ -244,6 +244,19 @@ class OpmTest extends FunSuite with ShouldMatchers {
     assert(foo2.bar === None)
   }
 
+  test("nested option reads None when not set"){
+    val foo = instance[Foo]("fake").set(_.id).to(1)
+    assert(foo.id === 1)
+    assert(foo.bar === None)
+  }
+
+  test("nested non-option throws an exception when not set"){
+    val foo = instance[Foo]("fake")
+    intercept[NoSuchElementException] {
+      assert(foo.id === 1)
+    }
+  }
+
   test("set pending") {
     val a = instance[Foo]().
       set(_.id).to(1L).

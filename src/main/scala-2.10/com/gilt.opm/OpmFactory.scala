@@ -140,11 +140,17 @@ trait OpmFactory {
                 }).asInstanceOf[AnyRef]
               }
             } else {
-              model.fields(fieldName) match {
-                case OpmField(_, Some(pending)) if (pending > NanoTimestamp.now) => throw PendingOpmValueException("field '%s' on object is pending until %s".format(fieldName, pending))
-                case OpmField(value, Some(pending)) => throw new NoSuchElementException("key not found: %s".format(fieldName))
-                case OpmField(value, None) => value.asInstanceOf[AnyRef]
-                case other => other.asInstanceOf[AnyRef]
+              if (model.fields.contains(fieldName)) {
+                model.fields(fieldName) match {
+                  case OpmField(_, Some(pending)) if (pending > NanoTimestamp.now) => throw PendingOpmValueException("field '%s' on object is pending until %s".format(fieldName, pending))
+                  case OpmField(value, Some(pending)) => throw new NoSuchElementException("key not found: %s".format(fieldName))
+                  case OpmField(value, None) => value.asInstanceOf[AnyRef]
+                  case other => other.asInstanceOf[AnyRef]
+                }
+              } else if (method.getReturnType.isAssignableFrom(classOf[Option[_]])) {
+                None
+              } else {
+                throw new NoSuchElementException("key not found: %s".format(fieldName))
               }
             }
           case unknown =>
