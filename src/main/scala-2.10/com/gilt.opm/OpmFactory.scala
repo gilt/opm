@@ -4,6 +4,8 @@ import java.lang.reflect.{Proxy, Method, InvocationHandler}
 import scala.collection.mutable
 import com.giltgroupe.util.time.MonotonicClock
 import com.gilt.opm.OpmFactory.OpmField
+import java.util
+import scala.collection.JavaConverters._
 
 object OpmIntrospection {
   val ClassField = "__c__"
@@ -26,7 +28,7 @@ trait OpmFactory {
   def clock(): Long
 
   import OpmIntrospection._
-  import OpmFactory.{introspectionMode, ModelExposeException, PendingOpmValueException, introspectionScratch, Scratch, recoverModel}
+  import OpmFactory.{EmptyJList, EmptyJMap, EmptyJSet, EmptyMap, EmptySeq, EmptySet, introspectionMode, ModelExposeException, PendingOpmValueException, introspectionScratch, Scratch, recoverModel}
 
   /**
    * If you want to create an instance that gets persisted, you MUST give it a key when you create it.
@@ -149,6 +151,21 @@ trait OpmFactory {
                 }
               } else if (method.getReturnType.isAssignableFrom(classOf[Option[_]])) {
                 None
+              } else if (method.getReturnType.isAssignableFrom(classOf[util.List[_]])) {
+                // NB: The following defaults and class matching are based on immutable types because
+                // OPM is by definition immutable. See @OpmTest for examples setting/editing properties
+                // of these "collection" types.
+                EmptyJList
+              } else if (method.getReturnType.isAssignableFrom(classOf[util.Map[_,_]])) {
+                EmptyJMap
+              } else if (method.getReturnType.isAssignableFrom(classOf[util.Set[_]])) {
+                EmptyJSet
+              } else if (method.getReturnType.isAssignableFrom(classOf[Set[_]])) {
+                EmptySet
+              } else if (method.getReturnType.isAssignableFrom(classOf[Seq[_]])) {
+                EmptySeq
+              } else if (method.getReturnType.isAssignableFrom(classOf[Map[_, _]])) {
+                EmptyMap
               } else {
                 throw new NoSuchElementException("key not found: %s".format(fieldName))
               }
@@ -165,6 +182,14 @@ trait OpmFactory {
 object OpmFactory extends OpmFactory {
 
   def clock() = MonotonicClock.currentTimeNanos
+
+  private [opm] val EmptyMap: Map[_,_] = Map.empty
+  private [opm] val EmptySet: Set[_] = Set.empty
+  private [opm] val EmptySeq: Seq[_] = Seq.empty
+
+  private [opm] val EmptyJList: util.List[_] = util.Collections.emptyList()
+  private [opm] val EmptyJMap: util.Map[_, _] = util.Collections.emptyMap()
+  private [opm] val EmptyJSet: util.Set[_] = util.Collections.emptySet()
 
   private [opm] case class OpmField(value: Any, pending: Option[NanoTimestamp] = None)
 

@@ -5,6 +5,8 @@ import org.scalatest.matchers.ShouldMatchers
 import java.util.concurrent.TimeUnit
 import com.gilt.opm.OpmFactory.PendingOpmValueException
 import java.util.NoSuchElementException
+import java.util
+import scala.collection.JavaConverters._
 
 /**
  * Document Me.
@@ -32,6 +34,18 @@ object OpmTest {
     def things: Set[String]
   }
 
+  trait Baz extends OpmObject {
+    def id: Long = 0
+
+    def things: Set[String]
+
+    def jThings: util.Set[String]
+
+    def thingsMap: Map[String, String]
+
+    def jThingsMap: util.Map[String, String]
+  }
+
   trait MixOfOptionalNonOptional extends Named {
     def value: Option[String]
   }
@@ -51,7 +65,7 @@ object OpmTest {
 
 class OpmTest extends FunSuite with ShouldMatchers {
 
-  import OpmTest.{Foo, Bar, SubFoo, MixOfOptionalNonOptional, MixOfOptionalNonOptionalWithMethod, Named}
+  import OpmTest.{Foo, Bar, Baz, SubFoo, MixOfOptionalNonOptional, MixOfOptionalNonOptionalWithMethod, Named}
   import OpmFactory._
 
   var time = 0l
@@ -248,6 +262,90 @@ class OpmTest extends FunSuite with ShouldMatchers {
     val foo = instance[Foo]("fake").set(_.id).to(1)
     assert(foo.id === 1)
     assert(foo.bar === None)
+  }
+
+  test("nested iterable reads Empty when not set"){
+    val baz = instance[Baz]("fake").set(_.things).to(Set.empty)
+    assert(baz.things === Set.empty)
+
+    val baz2 = instance[Baz]("fake").set(_.id).to(1)
+    assert(baz2.id === 1)
+    assert(baz2.things === Set.empty)
+    assert(baz2.jThings === Set.empty.asJava)
+  }
+
+  test("edit nested iterable"){
+    val baz = instance[Baz]("fake").set(_.things).to(Set("1", "2"))
+    assert(baz.things === Set("1", "2"))
+
+    val updatedBaz = baz.set(_.things).to(baz.things ++ Set("3", "4"))
+    assert(updatedBaz.things === Set("1", "2", "3", "4"))
+
+    val list = new util.TreeSet[String]()
+    list.add("1")
+    list.add("2")
+    val baz1 = instance[Baz]("fake").set(_.jThings).to(list)
+    assert(baz1.jThings.size === 2)
+    assert(baz1.jThings.toArray === Array("1", "2"))
+
+    val updated = new util.TreeSet[String](baz1.jThings)
+    updated.add("3")
+    updated.add("4")
+    val updatedBaz1 = baz1.set(_.jThings).to(updated)
+    assert(updatedBaz1.jThings.size === 4)
+    assert(updatedBaz1.jThings.toArray === Array("1", "2", "3", "4"))
+  }
+
+  test("nested map"){
+    val baz = instance[Baz]("fake").set(_.thingsMap).to(Map.empty)
+    assert(baz.thingsMap === Map.empty)
+
+    val baz2 = instance[Baz]("fake").set(_.thingsMap).to(Map("1" -> "2"))
+    assert(baz2.thingsMap === Map("1" -> "2"))
+
+    val baz3 = instance[Baz]("fake").set(_.jThingsMap).to(Map.empty[String, String].asJava)
+    assert(baz3.jThingsMap === Map.empty[String, String].asJava)
+
+    val baz4 = instance[Baz]("fake").set(_.jThingsMap).to(Map("1" -> "2").asJava)
+    assert(baz4.jThingsMap.size === 1)
+    assert(baz4.jThingsMap.get("1") === "2")
+
+    val baz5 = instance[Baz]("fake").set(_.jThingsMap).to(new util.HashMap[String, String]())
+    assert(baz5.jThingsMap === new util.HashMap[String, String]())
+
+    val hm = new util.HashMap[String, String]()
+    hm.put("1", "2")
+    val baz6 = instance[Baz]("fake").set(_.jThingsMap).to(hm)
+    assert(baz6.jThingsMap.size === 1)
+    assert(baz6.jThingsMap.get("1") === "2")
+  }
+
+  test("edit nested map"){
+    val baz = instance[Baz]("fake").set(_.thingsMap).to(Map("1" -> "2"))
+    assert(baz.thingsMap === Map("1" -> "2"))
+
+    val updatedBaz = baz.set(_.thingsMap).to(baz.thingsMap ++ Map("3" -> "4"))
+    assert(updatedBaz.thingsMap === Map("1" -> "2", "3" -> "4"))
+
+    val hm = new util.HashMap[String, String]()
+    hm.put("1", "2")
+    val baz1 = instance[Baz]("fake").set(_.jThingsMap).to(hm)
+    assert(baz1.jThingsMap.size === 1)
+    assert(baz1.jThingsMap.get("1") === "2")
+
+    val updated: util.HashMap[String, String] = baz1.jThingsMap.asInstanceOf[util.HashMap[String, String]]
+    updated.put("3", "4")
+    val updatedBaz1 = baz1.set(_.jThingsMap).to(updated)
+    assert(updatedBaz1.jThingsMap.size === 2)
+    assert(updatedBaz1.jThingsMap.get("1") === "2")
+    assert(updatedBaz1.jThingsMap.get("3") === "4")
+  }
+
+  test("nested map reads Empty when not set"){
+    val baz = instance[Baz]("fake").set(_.id).to(1)
+    assert(baz.id === 1)
+    assert(baz.thingsMap === Map.empty)
+    assert(baz.jThingsMap === Map.empty[String, String].asJava)
   }
 
   test("nested non-option throws an exception when not set"){
