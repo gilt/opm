@@ -1,8 +1,8 @@
 package com.gilt.opm.lock
 
+import com.gilt.gfc.logging.Loggable
 import com.mongodb.casbah.Imports._
 import annotation.tailrec
-import com.giltgroupe.util.Loggable
 import java.util.concurrent.ConcurrentHashMap
 import scala.collection.JavaConverters._
 import com.mongodb.WriteConcern
@@ -55,7 +55,8 @@ trait LockManager extends Loggable {
   def waitMs: Long = 100l
   def sleepMs: Long = 50l
 
-  private implicit lazy val _lockWriteConcern = CWriteConcern.valueOf("SAFE")
+  private implicit lazy val _lockWriteConcern =
+    CWriteConcern.valueOf("SAFE").getOrElse(sys.error("Could not get hold of SAFE write concern"))
 
   private lazy val installedIndex = {
     locks.ensureIndex(MongoDBObject(TimestampKey -> 1))

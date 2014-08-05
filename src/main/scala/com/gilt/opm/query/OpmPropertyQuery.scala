@@ -4,9 +4,6 @@ import com.mongodb.DBObject
 
 /**
  * Implement this with case classes to define the manner in which individual properties can be queried.
- *
- * @author: Ryan Martin
- * @since: 11/1/12 6:47 PM
  */
 trait OpmPropertyQuery {
   /**

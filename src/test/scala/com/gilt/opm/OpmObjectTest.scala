@@ -1,7 +1,7 @@
 package com.gilt.opm
 
 import org.scalatest.FunSuite
-import org.scalatest.matchers.ShouldMatchers
+import org.scalatest.Matchers
 
 /**
  * Document Me.
@@ -31,14 +31,14 @@ object OpmObjectTest {
   }
 }
 
-class OpmObjectTest extends FunSuite with ShouldMatchers {
+class OpmObjectTest extends FunSuite with Matchers {
   import OpmObjectTest._
   import OpmFactory._
   test("opmMagic") {
     // confirm calling opmMagic always sucks
     val testObj = instance[OpmTestObject]("")
-    evaluating(testObj.opmMagic()) should produce[RuntimeException]
-    evaluating(new OpmObject{}.opmMagic()) should produce[RuntimeException]
+    a [RuntimeException] should be thrownBy testObj.opmMagic()
+    a [RuntimeException] should be thrownBy new OpmObject{}.opmMagic()
   }
 
   test("native types") {
@@ -85,11 +85,7 @@ class OpmObjectTest extends FunSuite with ShouldMatchers {
   }
 
   test("potentially reserved methods") {
-    evaluating {
-      instance[PotentiallyReservedMethods]("").set(_.opmKey).to("opmKey")
-    } should produce[RuntimeException]
-    evaluating {
-      instance[PotentiallyReservedMethods]("").set(_.opmTimestamp).to(0)
-    } should produce[RuntimeException]
+    a [RuntimeException] should be thrownBy instance[PotentiallyReservedMethods]("").set(_.opmKey).to("opmKey")
+    a [RuntimeException] should be thrownBy instance[PotentiallyReservedMethods]("").set(_.opmTimestamp).to(0)
   }
 }

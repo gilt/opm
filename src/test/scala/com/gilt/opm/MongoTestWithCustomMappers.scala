@@ -2,7 +2,7 @@ package com.gilt.opm
 
 import java.util.Date
 import org.scalatest.FunSuite
-import com.mongodb.casbah.MongoConnection
+import com.mongodb.casbah.MongoClient
 import com.mongodb.casbah.commons.{MongoDBObject, MongoDBList}
 import com.mongodb.{DBObject, BasicDBList}
 import com.mongodb.casbah.commons.Implicits._

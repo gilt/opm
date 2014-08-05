@@ -23,9 +23,6 @@ import query._
   * completely processed and negates any advantages of the lazy-loaded stream.
   *
   * @param valueTranslator: @see com.gilt.opm.query.OpmSearcher
-  *
-  * @author: Ryan Martin
-  * @since: 11/1/12 6:37 PM
   */
 class OpmQueryResult[T <: OpmObject : Manifest](val all: Stream[T], valueTranslator: Option[(String, Any) => Any] = None) {
    private val clazz = manifest[T].runtimeClass
@@ -43,10 +40,11 @@ class OpmQueryResult[T <: OpmObject : Manifest](val all: Stream[T], valueTransla
     * together like this:
     * obj.search(_.property1).equals("foo").search(_.property2).equals("bar")...
     *
+    * Returns another result object, which can be further chained.
+    *
     * @param v: A "method" that determines the property to search against.
     * @tparam V: The class of the property to search against. This helps enforce the type that is passed into the second
     *          part of the chained search call (.equals in the example above).
-    * @return: Another result object, which can be further chained.
     */
    def search[V](v: T => V): OpmSearcherHelper[T, V] = {
      OpmSearcher[T](
@@ -60,9 +58,10 @@ class OpmQueryResult[T <: OpmObject : Manifest](val all: Stream[T], valueTransla
     * to collect the query, do something with it, and then pass it into an existing resultset (i.e. in
     * OpmMongoStorage.search).
     *
+    * Returns another result object, which can be further chained.
+    *
     * @param query: The query object to filter against.
     * @param matchInverse: Match the inverse of the query, i.e. 'not'.
-    * @return: Another result object, which can be further chained.
     */
    def search(query: OpmPropertyQuery, matchInverse: Boolean) = OpmQueryResult[T](all filter byQuery(query, matchInverse), valueTranslator)
 
@@ -72,11 +71,10 @@ class OpmQueryResult[T <: OpmObject : Manifest](val all: Stream[T], valueTransla
        else clazz.getMethod(query.property).invoke(item)
      } catch {
        // Look for the specific case of the Mongo document missing the property (which may happen due to "schema" changes)
-       case e: Exception => {
+       case e: Exception =>
          e.getCause match {
            case ex: NoSuchElementException => if (ex.getMessage.toLowerCase.contains("key not found: %s".format(query.property.toLowerCase))) null else throw e
          }
-       }
      }
 
      /**

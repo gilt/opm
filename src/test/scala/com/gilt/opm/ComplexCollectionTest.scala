@@ -1,9 +1,9 @@
 package com.gilt.opm
 
 import java.util.UUID
-import org.scalatest.FunSuite
-import org.scalatest.matchers.ShouldMatchers
-import com.mongodb.casbah.MongoConnection
+
+import com.mongodb.casbah.MongoClient
+import org.scalatest.{FunSuite, Matchers}
 
 /**
  * Exercises various edge cases around the supported collection types (List, Set, Seq, Map, IndexedSeq & Vector).
@@ -42,19 +42,20 @@ object ComplexCollectionTest {
 
 }
 
-class ComplexCollectionTest extends FunSuite with OpmMongoStorage[ComplexCollectionTest.ComplexCollections] with CollectionHelper with ShouldMatchers {
+class ComplexCollectionTest extends FunSuite with OpmMongoStorage[ComplexCollectionTest.ComplexCollections] with CollectionHelper with Matchers {
   def collectionName = "opm-ComplexCollectionTest"
 
-  import OpmFactory._
-  import ComplexCollectionTest.{ComplexCollections, Nested}
-  import CollectionHelper.databaseName
+  import com.gilt.opm.CollectionHelper.databaseName
+  import com.gilt.opm.ComplexCollectionTest.{ComplexCollections, Nested}
+  import com.gilt.opm.OpmFactory._
 
   lazy val nestedStorage = Some(new OpmMongoStorage[Nested] {
-    val collection = MongoConnection()(databaseName)("opm-ComplexCollectionTest-nested")
-    val locks = MongoConnection()(databaseName)("opm-ComplexCollectionTest-nested-locks")
+    val collection = MongoClient()(databaseName)("opm-ComplexCollectionTest-nested")
+    val locks = MongoClient()(databaseName)("opm-ComplexCollectionTest-nested-locks")
   })
 
   override def nestedToStorage[T <: OpmObject](obj: Option[T] = None)(implicit mf: Manifest[T]) = nestedStorage.asInstanceOf[Option[OpmStorage[T]]]
+
   test("arbitrary collections can be stored & retrieved") {
     val obj = instance[ComplexCollections]("a", Map(
       "aList" -> List("1", "2", "3"),

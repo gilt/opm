@@ -1,9 +1,10 @@
 package com.gilt.opm.lock
 
+import com.gilt.opm.utils.RichLongForMeasurement
 import org.scalatest.{BeforeAndAfterAll, FunSuite}
-import org.scalatest.matchers.ShouldMatchers
+import org.scalatest.Matchers
 import com.gilt.opm.CollectionHelper
-import com.giltgroupe.util.RichLongForMeasurement._
+import RichLongForMeasurement._
 
 /**
  * Document Me.
@@ -11,7 +12,7 @@ import com.giltgroupe.util.RichLongForMeasurement._
  * @author Eric Bowman
  * @since 1/9/13 9:54 AM
  */
-class LockReaperTest extends FunSuite with ShouldMatchers with LockManager with CollectionHelper with BeforeAndAfterAll {
+class LockReaperTest extends FunSuite with Matchers with LockManager with CollectionHelper with BeforeAndAfterAll {
   self =>
   override val collectionName = "opm_LockReaperTest"
 
@@ -34,21 +35,15 @@ class LockReaperTest extends FunSuite with ShouldMatchers with LockManager with 
 
     reaper.startReaper()
     val aLock = lock("oldLock")
-    evaluating {
-      lock("oldLock")
-    } should produce[RuntimeException]
+    an [RuntimeException] should be thrownBy lock("oldLock")
     Thread.sleep(reaper.maxLifespanMs + 1)
     lock("oldLock")
     aLock.unlock()
     reaper.stopReaper()
 
     lock("oldLock")
-    evaluating {
-      lock("oldLock")
-    } should produce[RuntimeException]
+    an [RuntimeException] should be thrownBy lock("oldLock")
     Thread.sleep(reaper.maxLifespanMs + 1)
-    evaluating {
-      lock("oldLock")
-    } should produce[RuntimeException]
+    an [RuntimeException] should be thrownBy lock("oldLock")
   }
 }

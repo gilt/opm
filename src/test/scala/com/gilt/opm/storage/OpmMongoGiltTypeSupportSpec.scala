@@ -1,11 +1,11 @@
 package com.gilt.opm.storage
 
+import com.gilt.gfc.id.Guid
+import com.gilt.gfc.time.Timestamp
 import com.gilt.opm.OpmFactory._
 import com.gilt.opm.{OpmMongoStorage, CollectionHelper, OpmObject}
-import com.giltgroupe.util.Timestamp
-import com.giltgroupe.typed.Guid
 import org.scalatest.FlatSpec
-import org.scalatest.matchers.ShouldMatchers
+import org.scalatest.Matchers
 
 object OpmMongoGiltTypeSupportSpec {
   trait GiltTypes extends OpmObject {
@@ -18,13 +18,13 @@ object OpmMongoGiltTypeSupportSpec {
 import OpmMongoGiltTypeSupportSpec._
 
 class OpmMongoGiltTypeSupportSpec
-extends FlatSpec with ShouldMatchers with OpmMongoStorage[GiltTypes] with OpmMongoGiltTypeSupport with CollectionHelper {
+extends FlatSpec with Matchers with OpmMongoStorage[GiltTypes] with OpmMongoGiltTypeSupport with CollectionHelper {
   val collectionName = "gilt_types"
 
   "OpmMongoGiltTypeSupport" should "allow extra gilt types to be stored and loaded" in {
     val gt = instance[GiltTypes]("key")
-      .set(_.typedGuid).to(Guid.randomGuid[GiltTypes])
-      .set(_.seqTypedGuid).to(Seq(Guid.randomGuid[GiltTypes]))
+      .set(_.typedGuid).to(Guid.randomGuid[GiltTypes]())
+      .set(_.seqTypedGuid).to(Seq(Guid.randomGuid[GiltTypes]()))
       .set(_.timestamp).to(new Timestamp())
       .set(_.optTimestamp).to(Some(new Timestamp()))
     put(gt)

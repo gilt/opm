@@ -1,8 +1,7 @@
 package com.gilt.opm
 
-import org.scalatest.FunSuite
-import org.scalatest.matchers.ShouldMatchers
 import com.gilt.opm.MixinBuilderTest.Mixins
+import org.scalatest.{FunSuite, Matchers}
 
 /**
  * An interesting use case for opm is for a general-purpose builder object.
@@ -16,6 +15,7 @@ import com.gilt.opm.MixinBuilderTest.Mixins
  * @since 2/9/13 11:36 AM
  */
 object MixinBuilderTest {
+
   trait Behavior1 {
     def name1: String
   }
@@ -29,8 +29,10 @@ object MixinBuilderTest {
   }
 
 }
-class MixinBuilderTest extends FunSuite with ShouldMatchers {
-  import OpmFactory._
+
+class MixinBuilderTest extends FunSuite with Matchers {
+
+  import com.gilt.opm.OpmFactory._
 
   test("Mixin should opm-ize correctly") {
     val obj = instance[MixinBuilderTest.Mixins]()

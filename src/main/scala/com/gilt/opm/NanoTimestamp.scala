@@ -1,19 +1,17 @@
 package com.gilt.opm
 
-import com.giltgroupe.util.Timestamp
-import com.giltgroupe.util.RichLongForMeasurement._
-import com.giltgroupe.util.MeasurementLong._
-import com.giltgroupe.util.time.MonotonicClock
+import com.gilt.gfc.time.{MonotonicClock, Timestamp}
+import com.gilt.opm.utils.{RichLongForMeasurement, MeasurementLong}
+import RichLongForMeasurement._
+import MeasurementLong._
 import com.fasterxml.jackson.annotation.{JsonCreator, JsonValue}
 
 /**
- * Immutable wrapper around a timestamp.  Represents time the same as {@link com.giltgroupe.util.time.MonotonicClock},
- * but provides no real operations. This is necessary for usage in which {@link com.giltgroupe.util.Timestamp}'s
+ * Immutable wrapper around a timestamp.  Represents time the same as `com.gilt.gfc.time.MonotonicClock`,
+ * but provides no real operations. This is necessary for usage in which `com.gilt.gfc.time.Timestamp`
  * milliseconds is not accurate enough.
  *
- * @author: Ryan Martin
- * @since: 11/19/12 2:06 PM
- * @param time: Time like from {@link com.giltgroupe.util.time.MonotonicClock#currentTimeNanos()}.
+ *@param time: Time like from [[MonotonicClock#currentTimeNanos()]].
  */
 class NanoTimestamp(val time: Long) extends Comparable[NanoTimestamp] {
 
@@ -21,8 +19,8 @@ class NanoTimestamp(val time: Long) extends Comparable[NanoTimestamp] {
    * Constructs a new instance representing "now"
    */
   def this() = this(
-    if (NanoTimestamp.getArtificialNow == 0) MonotonicClock.currentTimeNanos
-    else NanoTimestamp.getArtificialNow
+    if (NanoTimestamp.getArtificialNow == 0) MonotonicClock.currentTimeNanos()
+    else NanoTimestamp.getArtificialNow()
   )
 
   /**
@@ -32,20 +30,20 @@ class NanoTimestamp(val time: Long) extends Comparable[NanoTimestamp] {
    *
    * Intentionally not creating a method for the reverse conversion because of the loss of data (nanoseconds).
    *
-   * @param timestamp {@link com.giltgroupe.util.Timestamp} instance
+   * @param timestamp `Timestamp` instance
    * @param ns: The number of nanoseconds to append to the Timestamp (since it can't store them itself)
    */
   def this(timestamp: Timestamp, ns: Long) = this(
-    ((timestamp.getTime milliseconds) in seconds in nanoseconds) + ns
+    (timestamp.getTime.milliseconds in seconds in nanoseconds) + ns
   )
 
   /**
    * Constructs a new instance from a Timestamp instance. This is separate from above to make it explicitly clear
    * that nanoseconds is not passed in, and the milliseconds in the Timestamp should be preserved.
    *
-   * @param timestamp {@link com.giltgroupe.util.Timestamp} instance
+   * @param timestamp `Timestamp` instance
    */
-  def this(timestamp: Timestamp) = this((timestamp.getTime milliseconds) in nanoseconds)
+  def this(timestamp: Timestamp) = this(timestamp.getTime.milliseconds in nanoseconds)
 
   /**
    * Compare this instance with equality against a different instance
@@ -70,9 +68,9 @@ class NanoTimestamp(val time: Long) extends Comparable[NanoTimestamp] {
    *
    * @return a string representation
    */
-  override def toString() = {
-    val fractionalSeconds = time - ((time nanoseconds) in seconds in nanoseconds)
-    """(\d\d:\d\d:\d\d) """.r replaceAllIn (new Timestamp((time nanoseconds) in milliseconds).toString, "$1.%09d ".format(fractionalSeconds))
+  override def toString = {
+    val fractionalSeconds = time - (time.nanoseconds in seconds in nanoseconds)
+    """(\d\d:\d\d:\d\d) """.r replaceAllIn (new Timestamp(time.nanoseconds in milliseconds).toString, "$1.%09d ".format(fractionalSeconds))
   }
 
   override def compareTo(o: NanoTimestamp) = {
@@ -80,7 +78,7 @@ class NanoTimestamp(val time: Long) extends Comparable[NanoTimestamp] {
     // a long, but this returns an int. Rather than
     // risk undefined behavior with big time spans,
     // better to just to be explicit
-    (time - o.time) match {
+    time - o.time match {
       case lt if lt < 0 => -1
       case gt if gt > 0 => 1
       case _ => 0

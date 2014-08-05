@@ -1,9 +1,9 @@
 package com.gilt.opm
 
 import org.scalatest.{BeforeAndAfterAll, FunSuite}
-import com.mongodb.casbah.MongoConnection
+import com.mongodb.casbah.MongoClient
 import java.util.concurrent.TimeUnit
-import org.scalatest.matchers.ShouldMatchers
+import org.scalatest.Matchers
 
 /**
  * Document Me.
@@ -47,7 +47,7 @@ object NestedMongoTest {
 
 }
 
-class NestedOpmMongoTest extends FunSuite with OpmMongoStorage[NestedMongoTest.OpmA] with CollectionHelper with BeforeAndAfterAll with ShouldMatchers {
+class NestedOpmMongoTest extends FunSuite with OpmMongoStorage[NestedMongoTest.OpmA] with CollectionHelper with BeforeAndAfterAll with Matchers {
   import NestedMongoTest._
   import OpmFactory._
   import CollectionHelper.databaseName
@@ -55,20 +55,20 @@ class NestedOpmMongoTest extends FunSuite with OpmMongoStorage[NestedMongoTest.O
   val collectionName = "nested-opm"
 
   override def beforeAll() {
-    MongoConnection()(databaseName)("nested-opm-opmb").drop()
-    MongoConnection()(databaseName)("nested-opm-opmb-locks").drop()
+    MongoClient()(databaseName)("nested-opm-opmb").drop()
+    MongoClient()(databaseName)("nested-opm-opmb-locks").drop()
 
-    MongoConnection()(databaseName)("nested-opm-opmc").drop()
-    MongoConnection()(databaseName)("nested-opm-opmc-locks").drop()
+    MongoClient()(databaseName)("nested-opm-opmc").drop()
+    MongoClient()(databaseName)("nested-opm-opmc-locks").drop()
 
-    MongoConnection()(databaseName)("nested-opm-opmd").drop()
-    MongoConnection()(databaseName)("nested-opm-opmd-locks").drop()
+    MongoClient()(databaseName)("nested-opm-opmd").drop()
+    MongoClient()(databaseName)("nested-opm-opmd-locks").drop()
   }
 
   private def getStorage[T <: OpmObject](implicit mf: Manifest[T]): Option[OpmMongoStorage[T]] = {
     Option(new OpmMongoStorage[T] {
-      val collection = MongoConnection()(databaseName)("nested-opm-%s".format(mf.erasure.getSimpleName.toLowerCase))
-      val locks = MongoConnection()(databaseName)("nested-opm-%s-locks".format(mf.erasure.getSimpleName.toLowerCase))
+      val collection = MongoClient()(databaseName)("nested-opm-%s".format(mf.runtimeClass.getSimpleName.toLowerCase))
+      val locks = MongoClient()(databaseName)("nested-opm-%s-locks".format(mf.runtimeClass.getSimpleName.toLowerCase))
       override def nestedToStorage[U <: OpmObject](obj: Option[U])(implicit mf: Manifest[U]) = getStorage[U]
     })
   }
@@ -120,22 +120,14 @@ class NestedOpmMongoTest extends FunSuite with OpmMongoStorage[NestedMongoTest.O
     assert(loadedA.get.b.get.c.get === c)
     assert(loadedA.get.b.get.c.get.name === "hello, C")
     assert(loadedA.get.b.get.c.get.d === d)
-    val caught1 = evaluating {
+    an [PendingOpmValueException] should be thrownBy {
       loadedA.get.b.get.c.get.d.name
-    } should produce[RuntimeException]
-    assert(caught1 match {
-      case PendingOpmValueException(message) => true
-      case e: NoSuchElementException => false
-    })
+    }
     assert(loadedA.get.isPending(_.b.get.c.get.d.name))
     Thread.sleep(1000)
-    val caught2 = evaluating {
+    an [NoSuchElementException] should be thrownBy {
       loadedA.get.b.get.c.get.d.name
-    } should produce[RuntimeException]
-    assert(caught2 match {
-      case PendingOpmValueException(message) => false
-      case e: NoSuchElementException => true
-    })
+    }
     assert(!loadedA.get.isPending(_.b.get.c.get.d.name))
   }
 }

@@ -4,6 +4,7 @@ import collection.mutable
 import com.gilt.opm.OpmFactory._
 import com.gilt.opm.OpmFactory.Scratch
 import com.gilt.opm.{OpmQueryResult, OpmObject, OpmFactory}
+import scala.language.implicitConversions
 
 /**
  * A class to help determine correct typing on searches for a given OpmObject T.
@@ -27,11 +28,11 @@ import com.gilt.opm.{OpmQueryResult, OpmObject, OpmFactory}
  *                       classes.
  *
  * @param stackOverride: Used only by OpmSearcherHelper to immutably create a 'not' query. Generally shouldn't be used.
- *
- * @author: Ryan Martin
- * @since: 11/2/12 8:38 PM
  */
-case class OpmSearcher[T <: OpmObject : Manifest](finishSearch: (OpmPropertyQuery, Boolean) => OpmQueryResult[T], matchInverse: Boolean = false, valueTranslator: Option[(String, Any) => Any] = None, stackOverride: mutable.Stack[Scratch] = null) {
+case class OpmSearcher[T <: OpmObject : Manifest](finishSearch: (OpmPropertyQuery, Boolean) => OpmQueryResult[T],
+                                                  matchInverse: Boolean = false,
+                                                  valueTranslator: Option[(String, Any) => Any] = None,
+                                                  stackOverride: mutable.Stack[Scratch] = null) {
   private[query] var stack: mutable.Stack[Scratch] = stackOverride
 
   /**
@@ -59,59 +60,36 @@ case class OpmSearcher[T <: OpmObject : Manifest](finishSearch: (OpmPropertyQuer
 
   /**
    * Matches records where property is between start and end, including those values.
-   *
-   * @param start
-   * @param end
-   * @return
    */
   private [query] def between[V <% Ordered[V]](start: V, end: V) = finishSearch(OpmPropertyBetween(property, start, end, valueTranslator), matchInverse)
 
   /**
    * Matches records where property is between start and end, excluding those values.
-   *
-   * @param start
-   * @param end
-   * @return
    */
   private [query] def betweenExcl[V <% Ordered[V]](start: V, end: V) = finishSearch(OpmPropertyBetweenExclusive(property, start, end, valueTranslator), matchInverse)
 
   /**
    * Matches records where the (array) property contains the given value.
-   *
-   * @param value
-   * @return
    */
   private [query] def contains[V](value: V) = finishSearch(OpmPropertyContains(property, value, valueTranslator), matchInverse)
 
   /**
    * Matches records where property == value
-   *
-   * @param value
-   * @return
    */
   private [query] def eql[V](value: V) = finishSearch(OpmPropertyEquals(property, value, valueTranslator), matchInverse)
 
   /**
    * Matches records where property > value
-   *
-   * @param value
-   * @return
    */
   private [query] def gt[V <% Ordered[V]](value: V) = finishSearch(OpmPropertyGreaterThan(property, value, valueTranslator), matchInverse)
 
   /**
    * Matches records where property >= value
-   *
-   * @param value
-   * @return
    */
   private [query] def gte[V <% Ordered[V]](value: V) = finishSearch(OpmPropertyGreaterThanOrEqual(property, value, valueTranslator), matchInverse)
 
   /**
    * Matches records where property is included in the given array.
-   *
-   * @param values
-   * @return
    */
   private [query] def in[V](values: Iterable[V]) = finishSearch(OpmPropertyIn(property, values, valueTranslator), matchInverse)
 
@@ -119,24 +97,16 @@ case class OpmSearcher[T <: OpmObject : Manifest](finishSearch: (OpmPropertyQuer
    * Matches records in which the property is not defined.
    *
    * Further refactoring may open this up to empty-string, but I'm leaving it as blank only for now.
-   *
-   * @return
    */
   private [query] def isBlank() = finishSearch(OpmPropertyBlank(property), matchInverse)
 
   /**
    * Matches records where property < value
-   *
-   * @param value
-   * @return
    */
   private [query] def lt[V <% Ordered[V]](value: V) = finishSearch(OpmPropertyLessThan(property, value, valueTranslator), matchInverse)
 
   /**
    * Matches records where property <= value
-   *
-   * @param value
-   * @return
    */
   private [query] def lte[V <% Ordered[V]](value: V) = finishSearch(OpmPropertyLessThanOrEqual(property, value, valueTranslator), matchInverse)
 

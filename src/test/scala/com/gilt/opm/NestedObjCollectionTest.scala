@@ -1,7 +1,7 @@
 package com.gilt.opm
 
 import org.scalatest.FunSuite
-import com.mongodb.casbah.MongoConnection
+import com.mongodb.casbah.MongoClient
 
 /**
  * Document Me.
@@ -28,8 +28,8 @@ class NestedObjTests extends FunSuite with OpmMongoStorage[NestedObjTests.Nested
   import OpmFactory._
 
   lazy val nestedStorage = Some(new OpmMongoStorage[Nested] {
-      val collection = MongoConnection()(databaseName)("opm-NestedObjTests-nested")
-      val locks = MongoConnection()(databaseName)("opm-NestedObjTests-nested-locks")
+      val collection = MongoClient()(databaseName)("opm-NestedObjTests-nested")
+      val locks = MongoClient()(databaseName)("opm-NestedObjTests-nested-locks")
     })
 
   override def nestedToStorage[T <: OpmObject](obj: Option[T] = None)(implicit mf: Manifest[T]) = nestedStorage.asInstanceOf[Option[OpmStorage[T]]]

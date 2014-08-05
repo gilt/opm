@@ -1,7 +1,7 @@
 package com.gilt.opm.lock
 
 import org.scalatest.FunSuite
-import org.scalatest.matchers.ShouldMatchers
+import org.scalatest.Matchers
 import java.util.concurrent.{CountDownLatch, Executors}
 import java.util.concurrent.atomic.AtomicInteger
 import com.gilt.opm.CollectionHelper
@@ -12,7 +12,7 @@ import com.gilt.opm.CollectionHelper
  * @author Eric Bowman
  * @since 1/8/13 7:44 AM
  */
-class LockManagerTest extends FunSuite with ShouldMatchers with LockManager with CollectionHelper {
+class LockManagerTest extends FunSuite with Matchers with LockManager with CollectionHelper {
 
   override val collectionName = "opm_LockManagerTest"
 
@@ -33,11 +33,9 @@ class LockManagerTest extends FunSuite with ShouldMatchers with LockManager with
     val aLock = this.lock("test2")
     try {
       val start = System.currentTimeMillis()
-      evaluating {
-        lock("test2")
-      } should produce[RuntimeException]
+      a [RuntimeException] should be thrownBy lock("test2")
       val done = System.currentTimeMillis()
-      (done - start) should be >= (100L)
+      (done - start) should be >= 100L
     } finally {
       aLock.unlock()
     }

@@ -4,7 +4,7 @@ import com.gilt.opm.OpmFactory._
 import com.gilt.opm.{OpmMongoStorage, CollectionHelper, OpmObject}
 import java.net.{InetAddress, Inet4Address, Inet6Address}
 import org.scalatest.FlatSpec
-import org.scalatest.matchers.ShouldMatchers
+import org.scalatest.Matchers
 
 object OpmMongoBasicTypeSupportSpec {
   trait BasicTypes extends OpmObject {
@@ -23,7 +23,7 @@ object OpmMongoBasicTypeSupportSpec {
 import OpmMongoBasicTypeSupportSpec._
 
 class OpmMongoBasicTypeSupportSpec
-extends FlatSpec with ShouldMatchers with OpmMongoStorage[BasicTypes] with OpmMongoBasicTypeSupport with CollectionHelper {
+extends FlatSpec with Matchers with OpmMongoStorage[BasicTypes] with OpmMongoBasicTypeSupport with CollectionHelper {
   val collectionName = "basic_types"
 
   "OpmMongoBasicTypeSupport" should "allow extra basic types to be stored and loaded" in {

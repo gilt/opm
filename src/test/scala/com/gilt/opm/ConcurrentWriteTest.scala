@@ -1,8 +1,8 @@
 package com.gilt.opm
 
-import org.scalatest.FunSuite
-import org.scalatest.matchers.ShouldMatchers
 import java.util.ConcurrentModificationException
+
+import org.scalatest.{FunSuite, Matchers}
 
 /**
  * Tests the core concurrent modification contract.
@@ -12,17 +12,21 @@ import java.util.ConcurrentModificationException
  */
 
 object ConcurrentWriteTest {
+
   trait SimpleObject extends OpmObject {
     def foo: String
   }
+
 }
 
-class ConcurrentWriteTest extends FunSuite with OpmMongoStorage[ConcurrentWriteTest.SimpleObject] with ShouldMatchers with CollectionHelper {
-  import ConcurrentWriteTest.SimpleObject
-  import OpmFactory._
+class ConcurrentWriteTest extends FunSuite with OpmMongoStorage[ConcurrentWriteTest.SimpleObject] with Matchers with CollectionHelper {
+
+  import com.gilt.opm.ConcurrentWriteTest.SimpleObject
+  import com.gilt.opm.OpmFactory._
+
   override val collectionName = "opm-ConcurrentWriteTest"
 
-  test("""Trying to write an object with divergent history throws a ConcurrentModificationException""") {
+  test( """Trying to write an object with divergent history throws a ConcurrentModificationException""") {
     val foo = instance[SimpleObject]("a", Map("foo" -> "initial value"))
     put(foo)
 
@@ -31,12 +35,10 @@ class ConcurrentWriteTest extends FunSuite with OpmMongoStorage[ConcurrentWriteT
 
     put(foo1)
 
-    evaluating {
-      put(foo2)
-    } should produce[ConcurrentModificationException]
+    an [ConcurrentModificationException] should be thrownBy put(foo2)
   }
 
-  test("""Trying to squashPut an object with divergent history succeeds""") {
+  test( """Trying to squashPut an object with divergent history succeeds""") {
     val foo = instance[SimpleObject]("a", Map("foo" -> "initial value"))
     put(foo)
 

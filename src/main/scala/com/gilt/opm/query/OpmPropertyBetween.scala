@@ -1,15 +1,13 @@
 package com.gilt.opm.query
 
+import com.gilt.opm.utils.MongoHelper
 import com.mongodb.casbah.commons.{MongoDBList, MongoDBObject}
-import com.giltgroupe.service.commons.mongo.MongoHelper.toMongo
+import MongoHelper.toMongo
 
 /**
  * Case class representing the logic to filter a property that is between the given values, inclusive.
  *
- * @param valueTranslator: @see com.gilt.opm.query.OpmSearcher
- *
- * @author: Ryan Martin
- * @since: 11/6/12 1:24 PM
+ * @param valueTranslator: see [[com.gilt.opm.query.OpmSearcher]]
  */
 case class OpmPropertyBetween[T <% Ordered[T]](property: String, start: T, end: T, valueTranslator: Option[(String, Any) => Any] = None) extends OpmPropertyQuery {
   override def isMatch(obj: Any): Boolean = {

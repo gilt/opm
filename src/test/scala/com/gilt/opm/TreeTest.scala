@@ -1,6 +1,6 @@
 package com.gilt.opm
 
-import org.scalatest.matchers.ShouldMatchers
+import org.scalatest.Matchers
 import org.scalatest.FunSuite
 
 
@@ -16,7 +16,7 @@ object TreeModule {
  * @author Eric Bowman
  * @since 8/20/12 8:36 AM
  */
-class TreeTest extends FunSuite with ShouldMatchers {
+class TreeTest extends FunSuite with Matchers {
 
   import TreeModule._
   import OpmFactory._

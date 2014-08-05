@@ -1,5 +1,7 @@
 package com.gilt.opm
 
+import scala.language.implicitConversions
+
 trait OpmObject {
   final def opmMagic() {
     sys.error("It's not allowed to implement your OpmObject trait directly. Please use OpmFactory.instance")

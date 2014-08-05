@@ -1,9 +1,8 @@
 package com.gilt.opm
 
 import org.scalatest.FunSuite
-import org.scalatest.matchers.ShouldMatchers
+import org.scalatest.Matchers
 import java.util.concurrent.TimeUnit
-import com.gilt.opm.OpmFactory.PendingOpmValueException
 import java.util.NoSuchElementException
 import java.util
 import scala.collection.JavaConverters._
@@ -54,16 +53,15 @@ object OpmTest {
     def value: Option[String]
 
     override def equals(obj: Any) = obj match {
-      case (o: MixOfOptionalNonOptionalWithMethod) => {
+      case (o: MixOfOptionalNonOptionalWithMethod) =>
         (this.name == o.name) &&
         (this.value == o.value)
-      }
       case _ => false
     }
   }
 }
 
-class OpmTest extends FunSuite with ShouldMatchers {
+class OpmTest extends FunSuite with Matchers {
 
   import OpmTest.{Foo, Bar, Baz, SubFoo, MixOfOptionalNonOptional, MixOfOptionalNonOptionalWithMethod, Named}
   import OpmFactory._
@@ -80,7 +78,7 @@ class OpmTest extends FunSuite with ShouldMatchers {
 
     assert(foo4.bar.get.name === "a bar")
 
-    val foo5 = foo4.set(_.bar.get.things) to (Set("a,b,c".split(","): _*))
+    val foo5 = foo4.set(_.bar.get.things) to Set("a,b,c".split(","): _*)
     assert(foo5.bar.get.things === Set("a", "b", "c"))
   }
 
@@ -92,7 +90,7 @@ class OpmTest extends FunSuite with ShouldMatchers {
 
   test("prune") {
     val empty = instance[Foo]("")
-    val init = (empty set (_.name) := "init")
+    val init = empty set (_.name) := "init"
     val pruned = init.set(_.name).to("ready").prune
     assert(pruned.timeline.size === 1)
   }
@@ -207,18 +205,17 @@ class OpmTest extends FunSuite with ShouldMatchers {
 
   // test diff across types fails
   test("diff type constraints") {
-    evaluating {
+    a [RuntimeException] should be thrownBy {
       instance[Foo]("") diff
         new Bar {
           def name = null
 
           def things = Set.empty[String]
         }.asInstanceOf[Foo]
-    } should produce[RuntimeException]
-
-    evaluating {
+    }
+    a [RuntimeException] should be thrownBy {
       instance[Foo]("") diff instance[Bar]("")
-    } should produce[RuntimeException]
+    }
   }
 
   // test diff across sub-types should not fail
@@ -238,17 +235,17 @@ class OpmTest extends FunSuite with ShouldMatchers {
   test("required fields present") {
     instance[MixOfOptionalNonOptional]("", Map("name" -> "eric"))
     instance[MixOfOptionalNonOptional]("", Map("name" -> "eric", "value" -> Some("skibum") ))
-    evaluating {
+    an [IllegalArgumentException] should be thrownBy {
       instance[MixOfOptionalNonOptional]("", Map("value" -> Some("skibum") ))
-    } should produce[IllegalArgumentException]
+    }
   }
 
   test("required fields ignores methods") {
     instance[MixOfOptionalNonOptionalWithMethod]("", Map("name" -> "eric"))
     instance[MixOfOptionalNonOptionalWithMethod]("", Map("name" -> "eric", "value" -> Some("skibum") ))
-    evaluating {
+    an [IllegalArgumentException] should be thrownBy {
       instance[MixOfOptionalNonOptionalWithMethod]("", Map("value" -> Some("skibum") ))
-    } should produce[IllegalArgumentException]
+    }
   }
 
   test("nested option"){
@@ -359,13 +356,9 @@ class OpmTest extends FunSuite with ShouldMatchers {
     val a = instance[Foo]().
       set(_.id).to(1L).
       set(_.name).toPending(500, TimeUnit.MILLISECONDS)
-    val caught = evaluating {
+    an [PendingOpmValueException] should be thrownBy {
       a.name
-    } should produce[RuntimeException]
-    assert(caught match {
-      case PendingOpmValueException(message) => true
-      case e: NoSuchElementException => false
-    })
+    }
     assert(a.isPending(_.name))
   }
 
@@ -392,13 +385,9 @@ class OpmTest extends FunSuite with ShouldMatchers {
       set(_.id).to(1L).
       set(_.optName).to(None).
       set(_.optName).toPending(500, TimeUnit.MILLISECONDS)
-    val caught = evaluating {
+    an [PendingOpmValueException] should be thrownBy {
       a.optName
-    } should produce[RuntimeException]
-    assert(caught match {
-      case PendingOpmValueException(message) => true
-      case e: NoSuchElementException => false
-    })
+    }
     assert(a.isPending(_.optName))
   }
 
@@ -407,13 +396,9 @@ class OpmTest extends FunSuite with ShouldMatchers {
       set(_.id).to(1L).
       set(_.name).toPending(100, TimeUnit.MILLISECONDS)
     Thread.sleep(101)
-    val caught = evaluating {
+    an [NoSuchElementException] should be thrownBy {
       a.name
-    } should produce[RuntimeException]
-    assert(caught match {
-      case PendingOpmValueException(message) => false
-      case e: NoSuchElementException => true
-    })
+    }
     assert(!a.isPending(_.name))
   }
 
@@ -421,13 +406,9 @@ class OpmTest extends FunSuite with ShouldMatchers {
     val a = instance[Foo]().
       set(_.id).to(1L).
       set(_.name).toPending(1000, TimeUnit.MILLISECONDS)
-    val caught = evaluating {
+    an [PendingOpmValueException] should be thrownBy {
       a.name
-    } should produce[RuntimeException]
-    assert(caught match {
-      case PendingOpmValueException(message) => true
-      case e: NoSuchElementException => false
-    })
+    }
     val b = a.set(_.name).to("name1")
     assert(b.name === "name1")
     assert(!b.isPending(_.name))
@@ -448,21 +429,11 @@ class OpmTest extends FunSuite with ShouldMatchers {
     Thread.sleep(10)
     val b = a.set(_.name).toPending(10, TimeUnit.SECONDS)
     assert(a.opmTimestamp == b.opmTimestamp)
-    val caught1 = evaluating {
+    an [PendingOpmValueException] should be thrownBy {
       b.name
-    } should produce[RuntimeException]
-    assert(caught1 match {
-      case PendingOpmValueException(message) => true
-      case e: NoSuchElementException => false
-    })
+    }
     Thread.sleep(500)
-    val caught2 = evaluating {
-      b.name
-    } should produce[RuntimeException]
-    assert(caught2 match {
-      case PendingOpmValueException(message) => false
-      case e: NoSuchElementException => true
-    })
+    an [NoSuchElementException] should be thrownBy b.name
   }
 
   test("set pending on field on which previous pending has expired") {
@@ -471,51 +442,21 @@ class OpmTest extends FunSuite with ShouldMatchers {
     Thread.sleep(10)
     val b = a.set(_.name).toPending(10, TimeUnit.SECONDS)
     assert(a.opmTimestamp == b.opmTimestamp)
-    val caught1 = evaluating {
-      b.name
-    } should produce[RuntimeException]
-    assert(caught1 match {
-      case PendingOpmValueException(message) => true
-      case e: NoSuchElementException => false
-    })
+    an [PendingOpmValueException] should be thrownBy b.name
     Thread.sleep(500)
-    val caught2 = evaluating {
-      b.name
-    } should produce[RuntimeException]
-    assert(caught2 match {
-      case PendingOpmValueException(message) => false
-      case e: NoSuchElementException => true
-    })
+    an [NoSuchElementException] should be thrownBy b.name
     val c = a.set(_.name).toPending(500, TimeUnit.MILLISECONDS)
     assert(a.opmTimestamp != c.opmTimestamp)
-    val caught3 = evaluating {
-      c.name
-    } should produce[RuntimeException]
-    assert(caught3 match {
-      case PendingOpmValueException(message) => true
-      case e: NoSuchElementException => false
-    })
+    an [PendingOpmValueException] should be thrownBy c.name
     val d = b.set(_.name).toPending(500, TimeUnit.MILLISECONDS)
     assert(b.opmTimestamp != d.opmTimestamp)
-    val caught4 = evaluating {
-      d.name
-    } should produce[RuntimeException]
-    assert(caught4 match {
-      case PendingOpmValueException(message) => true
-      case e: NoSuchElementException => false
-    })
+    an [PendingOpmValueException] should be thrownBy d.name
   }
 
   test("don't set pending on field that has already been set to pending then set a value") {
     val a = instance[Foo]().
       set(_.name).toPending(1000, TimeUnit.MILLISECONDS)
-    val caught = evaluating {
-      a.name
-    } should produce[RuntimeException]
-    assert(caught match {
-      case PendingOpmValueException(message) => true
-      case e: NoSuchElementException => false
-    })
+    an [PendingOpmValueException] should be thrownBy a.name
     val b = a.set(_.name).to("name1")
     assert(b.name === "name1")
     val c = b.set(_.name).toPending(1000, TimeUnit.MILLISECONDS)
@@ -530,22 +471,10 @@ class OpmTest extends FunSuite with ShouldMatchers {
     val bp = a evolve b
     assert(bp.id === 0l)
 
-    val caught1 = evaluating {
-      bp.name
-    } should produce[RuntimeException]
-    assert(caught1 match {
-      case PendingOpmValueException(message) => true
-      case e: NoSuchElementException => false
-    })
+    an [PendingOpmValueException] should be thrownBy bp.name
     assert(bp.isPending(_.name))
     Thread.sleep(100)
-    val caught2 = evaluating {
-      bp.name
-    } should produce[RuntimeException]
-    assert(caught2 match {
-      case PendingOpmValueException(message) => false
-      case e: NoSuchElementException => true
-    })
+    an [NoSuchElementException] should be thrownBy bp.name
     assert(!bp.isPending(_.name))
   }
 
@@ -556,34 +485,16 @@ class OpmTest extends FunSuite with ShouldMatchers {
     val bp = a evolve b
     assert(bp.id === 0l)
 
-    val caught1 = evaluating {
-      bp.optName
-    } should produce[RuntimeException]
-    assert(caught1 match {
-      case PendingOpmValueException(message) => true
-      case e: NoSuchElementException => false
-    })
+    an [PendingOpmValueException] should be thrownBy bp.optName
     Thread.sleep(100)
-    val caught2 = evaluating {
-      bp.optName
-    } should produce[RuntimeException]
-    assert(caught2 match {
-      case PendingOpmValueException(message) => false
-      case e: NoSuchElementException => true
-    })
+    an [NoSuchElementException] should be thrownBy bp.optName
   }
 
   test("evolve from pending sets value when set") {
     val a = instance[Foo]().set(_.id).to(0l).set(_.name).toPending(100, TimeUnit.MILLISECONDS)
     val b = instance[Named]().set(_.name).to("name1")
 
-    val caught = evaluating {
-      a.name
-    } should produce[RuntimeException]
-    assert(caught match {
-      case PendingOpmValueException(message) => true
-      case e: NoSuchElementException => false
-    })
+    an [PendingOpmValueException] should be thrownBy a.name
     val bp = a evolve b
     assert(bp.id === 0l)
     assert(bp.name === "name1")
@@ -630,21 +541,9 @@ class OpmTest extends FunSuite with ShouldMatchers {
     val bp = a evolve b
     assert(bp.id === 0l)
     assert(bp.opmTimestamp == a.opmTimestamp)
-    val caught1 = evaluating {
-      bp.name
-    } should produce[RuntimeException]
-    assert(caught1 match {
-      case PendingOpmValueException(message) => true
-      case e: NoSuchElementException => false
-    })
+    an [PendingOpmValueException] should be thrownBy bp.name
     Thread.sleep(100)
-    val caught2 = evaluating {
-      bp.name
-    } should produce[RuntimeException]
-    assert(caught2 match {
-      case PendingOpmValueException(message) => false
-      case e: NoSuchElementException => true
-    })
+    an [NoSuchElementException] should be thrownBy bp.name
   }
 
   test("evolve from pending trait sets pending when previous pending has expired") {
@@ -654,38 +553,14 @@ class OpmTest extends FunSuite with ShouldMatchers {
     val c = a evolve b
     assert(c.id === 0l)
     assert(c.opmTimestamp == a.opmTimestamp)
-    val caught1 = evaluating {
-      c.name
-    } should produce[RuntimeException]
-    assert(caught1 match {
-      case PendingOpmValueException(message) => true
-      case e: NoSuchElementException => false
-    })
+    an [PendingOpmValueException] should be thrownBy c.name
     Thread.sleep(100)
-    val caught2 = evaluating {
-      c.name
-    } should produce[RuntimeException]
-    assert(caught2 match {
-      case PendingOpmValueException(message) => false
-      case e: NoSuchElementException => true
-    })
+    an [NoSuchElementException] should be thrownBy c.name
     val d = a evolve b
     assert(d.opmTimestamp != a.opmTimestamp)
-    val caught3 = evaluating {
-      d.name
-    } should produce[RuntimeException]
-    assert(caught3 match {
-      case PendingOpmValueException(message) => true
-      case e: NoSuchElementException => false
-    })
+    an [PendingOpmValueException] should be thrownBy d.name
     val e = c evolve b
     assert(e.opmTimestamp != c.opmTimestamp)
-    val caught4 = evaluating {
-      e.name
-    } should produce[RuntimeException]
-    assert(caught4 match {
-      case PendingOpmValueException(message) => true
-      case e: NoSuchElementException => false
-    })
+    an [PendingOpmValueException] should be thrownBy e.name
   }
 }

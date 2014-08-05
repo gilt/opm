@@ -4,12 +4,12 @@ import com.gilt.opm._
 import com.mongodb.casbah.commons.Imports._
 
 /**
- * Adds support for storing {@link Enumeration}s to MongoDB. You can mix in this trait on its own or
+ * Adds support for storing scala `Enumeration`s to MongoDB. You can mix in this trait on its own or
  * alongside any other support traits.
  */
 trait OpmMongoEnumerationSupport extends MongoMapper {
   private val mapTo: OpmToMongoMapper = {
-    case (_, _, v: scala.Enumeration$Val) => {
+    case (_, _, v: Enumeration$Val) => {
       // inspired by Jackson's Scala module
       val parentEnum = v.getClass.getSuperclass.getDeclaredFields.find(_.getName == "$outer").get
       val enumClass = parentEnum.get(v).getClass.getName

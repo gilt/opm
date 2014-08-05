@@ -1,8 +1,8 @@
 package com.gilt.opm
 
-import com.mongodb.casbah.MongoConnection
+import com.gilt.gfc.logging.Loggable
+import com.mongodb.casbah.MongoClient
 import lock.LockManager
-import com.giltgroupe.util.Loggable
 
 /**
  * Can mix into tests to provide a mongo database & collection to test against so that OpmMongoStorage is happy.
@@ -20,13 +20,13 @@ trait CollectionHelper {
   override def waitMs = 2000L   // jenkins can be slow
 
   lazy val collection = {
-    val col = MongoConnection()(CollectionHelper.databaseName)(collectionName)
+    val col = MongoClient()(CollectionHelper.databaseName)(collectionName)
     col.drop()
     info("Dropped %s, size = %s".format(col, col.size))
     col
   }
   lazy val locks = {
-    val col = MongoConnection()(CollectionHelper.databaseName)(collectionName + "_locks")
+    val col = MongoClient()(CollectionHelper.databaseName)(collectionName + "_locks")
     col.drop()
     info("Dropped %s, size = %s".format(col, col.size))
     col

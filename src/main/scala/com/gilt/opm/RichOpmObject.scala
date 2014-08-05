@@ -5,7 +5,6 @@ import collection.mutable
 import annotation.tailrec
 import java.util.concurrent.TimeUnit
 import com.gilt.opm.OpmFactory.OpmField
-import scala.reflect.{ClassTag, classTag}
 
 case class Diff(field: String, newValue: Option[OpmField])
 
@@ -139,7 +138,7 @@ abstract class RichOpmObjectInitializer[T <: OpmObject : Manifest] {
   private [opm] def toPending(expireAfter: Long, unit: TimeUnit): T = {
     @tailrec
     def populate(scratch: Scratch, value: Any, expireAt: Option[NanoTimestamp]): AnyRef = {
-      if (scratch.model.fields.get(scratch.field).map(f => f.pending.forall(_ > NanoTimestamp.now) && (f.value != None)).getOrElse(false)) newProxy(scratch.model) // No change if already set to non-None
+      if (scratch.model.fields.get(scratch.field).exists(f => f.pending.forall(_ > NanoTimestamp.now) && (f.value != None))) newProxy(scratch.model) // No change if already set to non-None
       else {
         val newFields = updateFields(scratch, OpmField(null, expireAt))
         val newModel = scratch.model.copy(fields = newFields, history = scratch.model #:: scratch.model.history)
@@ -162,7 +161,7 @@ abstract class RichOpmObjectInitializer[T <: OpmObject : Manifest] {
   private [opm] def toNotPending(): T = {
     @tailrec
     def populate(scratch: Scratch, value: Any): AnyRef = {
-      if (scratch.model.fields.get(scratch.field).map(!_.pending.isDefined).getOrElse(false)) newProxy(scratch.model) // No change if not pending
+      if (scratch.model.fields.get(scratch.field).exists(!_.pending.isDefined)) newProxy(scratch.model) // No change if not pending
       else {
         val newFields = updateFields(scratch, OpmField(null, None))
         val newModel = scratch.model.copy(fields = newFields, history = scratch.model #:: scratch.model.history)
@@ -267,7 +266,7 @@ case class RichOpmAuditObject[T <: OpmAuditedObject[U] : Manifest, U](obj: T) ex
     val newFields = model.fields + (UpdatedByField -> OpmField(Option(updatedBy)), UpdateReasonField -> OpmField(Option(updateReason)))
     val newModel = model.copy(fields = newFields) // Don't move history forward, because this should be attached to the current change.
     OpmFactory.instance(newModel)(new Manifest[OpmAuditedObject[U]] {
-      override val runtimeClass = manifest[T].erasure
+      override val runtimeClass = manifest[T].runtimeClass
     }).asInstanceOf[T]
   }
 }

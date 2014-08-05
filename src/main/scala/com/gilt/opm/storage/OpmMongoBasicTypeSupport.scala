@@ -5,8 +5,8 @@ import com.mongodb.casbah.commons.Imports._
 import java.net.InetAddress
 
 /**
- * Adds support for storing {@link InetAddress}, {@link BigDecimal} and {@link BigInt} members of an
- * {@link OpmObject} to MongoDB. You can mix in this trait on its own or alongside any other support
+ * Adds support for storing `InetAddress`, `BigDecimal` and `BigInt` members of an
+ * [[com.gilt.opm.OpmObject]] to MongoDB. You can mix in this trait on its own or alongside any other support
  * traits.
  */
 trait OpmMongoBasicTypeSupport extends MongoMapper {

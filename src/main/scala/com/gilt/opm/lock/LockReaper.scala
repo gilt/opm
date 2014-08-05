@@ -2,9 +2,10 @@ package com.gilt.opm.lock
 
 import java.util.concurrent.{ThreadFactory, Executors, ScheduledFuture, ScheduledExecutorService}
 
-import com.giltgroupe.util.RichLongForMeasurement._
+import com.gilt.gfc.logging.Loggable
+import com.gilt.opm.utils.RichLongForMeasurement
+import RichLongForMeasurement._
 import java.util.concurrent.TimeUnit.MILLISECONDS
-import com.giltgroupe.util.Loggable
 
 import com.mongodb.casbah.Imports._
 import java.util.concurrent.atomic.AtomicInteger
@@ -28,10 +29,10 @@ trait LockReaper extends Loggable {
   def executor: ScheduledExecutorService = defaultExecutor
 
   /** Run Mongo queries every periodMs milliseconds. */
-  def periodMs: Long = (5 minutes) in milliseconds
+  def periodMs: Long = 5.minutes in milliseconds
 
   /** Delay this many milliseconds before running the first mongo query. */
-  def initialDelayMs: Long = (30 seconds) in milliseconds
+  def initialDelayMs: Long = 30.seconds in milliseconds
 
   /** How many milliseconds since the last access time must have passed before we reap a lock. */
   def maxLifespanMs: Long = periodMs
@@ -87,7 +88,7 @@ trait LockReaper extends Loggable {
       (dbObj: DBObject) =>
         val obj = wrapDBObj(dbObj)
         warn("Deleting expired lock %s last modified %s with lifetime %s (exceeded by %s ms)".format(
-          obj.as[String](IdKey), obj.as[Long](TimestampKey), maxLifespanMs, (now - obj.as[Long](TimestampKey) - maxLifespanMs)))
+          obj.as[String](IdKey), obj.as[Long](TimestampKey), maxLifespanMs, now - obj.as[Long](TimestampKey) - maxLifespanMs))
         allCatch either locks.remove(obj) match {
           case Left(e) => error("Exception trying to remove lock %s".format(obj))
           case Right(_) => () // success

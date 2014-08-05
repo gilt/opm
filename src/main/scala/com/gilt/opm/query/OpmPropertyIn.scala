@@ -1,12 +1,13 @@
 package com.gilt.opm.query
 
+import com.gilt.opm.utils.MongoHelper
 import com.mongodb.casbah.commons.{MongoDBList, MongoDBObject}
-import com.giltgroupe.service.commons.mongo.MongoHelper._
+import MongoHelper._
 
 /**
  * Case class representing the logic to filter a property that is included the given array.
  *
- * @param valueTranslator: @see com.gilt.opm.query.OpmSearcher
+ * @param valueTranslator: see [[com.gilt.opm.query.OpmSearcher]]
  */
 case class OpmPropertyIn(property: String, value: Iterable[Any], valueTranslator: Option[(String, Any) => Any] = None) extends OpmPropertyQuery {
   override def isMatch(obj: Any) = value.exists(_ == obj)

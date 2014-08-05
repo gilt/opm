@@ -36,14 +36,15 @@ trait OpmStorage[V <: OpmObject] {
    * the type of the passed-in obj. If you know how to clean up this mess, please do. But it works as-is and is
    * generally hidden from the end user.
    *
+   * Returns an OpmStorage object for the given type.
+   *
    * @param obj: Really, this is just a placeholder that enforces some typing. This is an Option because some uses of
    *           this don't require the type to come with the object and it's suitable to pass None here. The real stuff
    *           comes from mf.
    * @param mf: This is what is used in actuality to figure out the type of returned OpmStorage object.
-   * @tparam V: A subclass of OpmObject.
-   * @return: An OpmStorage object for the given type.
+   * @tparam T: A subclass of OpmObject.
    */
-  def nestedToStorage[V <: OpmObject](obj: Option[V])(implicit mf: Manifest[V]): Option[OpmStorage[V]] = None
+  def nestedToStorage[T <: OpmObject](obj: Option[T])(implicit mf: Manifest[T]): Option[OpmStorage[T]] = None
 
 
   /**
@@ -65,6 +66,7 @@ trait OpmStorage[V <: OpmObject] {
    * @param obj: The current version of the object to persist.
    */
   def squashPut(obj: V)(implicit mf: Manifest[V]) {
+    import OpmObject._
     val toPut = get(obj.opmKey).map(obj.forceAfter(_)).getOrElse(obj.prune)
     put(toPut)
   }
@@ -76,6 +78,7 @@ trait OpmAuditedStorage[T <: OpmAuditedObject[U], U] extends OpmStorage[T] {
    * information from the final diff.
    */
   def squashPut(obj: T, updatedBy: U, updateReason: String)(implicit mf: Manifest[T]) {
+    import OpmAuditedObject._
     val toPut = get(obj.opmKey).map(obj.forceAfter(_)).getOrElse(obj.prune).by(updatedBy, updateReason)
     put(toPut)
   }

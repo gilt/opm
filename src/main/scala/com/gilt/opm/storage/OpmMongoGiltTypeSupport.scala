@@ -1,13 +1,13 @@
 package com.gilt.opm.storage
 
+import com.gilt.gfc.id.Guid
+import com.gilt.gfc.time.Timestamp
 import com.gilt.opm._
-import com.giltgroupe.util.Timestamp
-import com.giltgroupe.typed.Guid
 import com.mongodb.casbah.commons.Imports._
 
 /**
- * Adds support for storing {@link Guid} and {@link Timestamp} members of an
- * {@link OpmObject} to MongoDB. You can mix in this trait on its own or alongside any other support
+ * Adds support for storing `Guid` and `Timestamp` members of an
+ * `OpmObject` to MongoDB. You can mix in this trait on its own or alongside any other support
  * traits.
  */
 trait OpmMongoGiltTypeSupport extends MongoMapper {

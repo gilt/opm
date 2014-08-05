@@ -1,16 +1,15 @@
 package com.gilt.opm
 
+import java.util.{ConcurrentModificationException, Date, UUID}
+
+import com.gilt.opm.lock.LockManager
+import com.gilt.opm.query._
+import com.gilt.opm.storage.MongoMapper
 import com.mongodb.casbah.Imports._
-import com.mongodb.casbah.Implicits._
 import com.mongodb.casbah.commons.Implicits.wrapDBObj
-import com.mongodb.casbah.{WriteConcern => CWriteConcern}
 import com.mongodb.casbah.commons.{MongoDBList, MongoDBObject}
-import com.mongodb.DBObject
-import java.util.{ConcurrentModificationException, UUID, Date}
-import lock.LockManager
+import com.mongodb.casbah.{WriteConcern => CWriteConcern}
 import org.bson.types.BasicBSONList
-import query._
-import storage.MongoMapper
 
 /**
  * Mixing to provide mongo storage for OpmObjects.
@@ -27,30 +26,34 @@ import storage.MongoMapper
  * @since 8/22/12 12:18 PM
  */
 
-trait OpmMongoStorage[V <: OpmObject] extends OpmStorage[V] with MongoMapper with LockManager  {
+trait OpmMongoStorage[V <: OpmObject] extends OpmStorage[V] with MongoMapper with LockManager {
 
-  import OpmFactory._
-  import OpmIntrospection.{TimestampField, ClassField, MetaFields}
-  import OpmMongoStorage._
+  import com.gilt.opm.OpmFactory._
+  import com.gilt.opm.OpmIntrospection.{ClassField, MetaFields, TimestampField}
+  import com.gilt.opm.OpmMongoStorage._
 
   def collection: MongoCollection
 
   def writeConcern = CWriteConcern.valueOf("SAFE")
+
   private implicit lazy val _writeConcern = writeConcern
 
-  def wavelength: Int = 5           // value frame + (wavelength - 1) diff frames
+  def wavelength: Int = 5
+
+  // value frame + (wavelength - 1) diff frames
   def toMongoMapper: OpmToMongoMapper = noOpMongoMapper
+
   // Note: If a field is an Option, this class will wrap it correctly; in fromMongoMapper, you only need to map to the
   // base class. If you include the Option, you'll end up with something like this: Some(Some(...)) instead of Some(...).
   def fromMongoMapper: OpmFromMongoMapper = noOpMongoMapper
 
-  private [this] lazy val defaultToMongoMapper: PartialFunction[(String, Option[Class[_]], AnyRef), AnyRef] = {
+  private[this] lazy val defaultToMongoMapper: PartialFunction[(String, Option[Class[_]], AnyRef), AnyRef] = {
     case (f, _, s) if s.isInstanceOf[String] => s
     case (f, _, d) if d.isInstanceOf[Date] => d
     case (f, _, u) if u.isInstanceOf[UUID] => u
     case (f, _, n) if n == None => None
     case (f, optFieldClass, some) if some.isInstanceOf[Some[_]] => Some(mapToMongo(f, optFieldClass, OpmField(some.asInstanceOf[Option[AnyRef]].get)))
-    case (f, optFieldClass, iter) if iter.isInstanceOf[Iterable[_]] => {
+    case (f, optFieldClass, iter) if iter.isInstanceOf[Iterable[_]] =>
       val b = MongoDBList.newBuilder
       // So that we can work around type-erasure for nested collections, as we write a collection,
       // we write the first element of the collection a special object that tells us what the type of
@@ -61,17 +64,15 @@ trait OpmMongoStorage[V <: OpmObject] extends OpmStorage[V] with MongoMapper wit
       // we write the MongoDBObject below, you can see that test fail and better understand the kind of
       // situation where this helps.
       val anIter = iter.asInstanceOf[Iterable[_]]
-      if (!anIter.isEmpty && optFieldClass.isEmpty) {
+      if (anIter.nonEmpty && optFieldClass.isEmpty) {
         b += MongoDBObject("_t_" -> collectionCname(anIter))
       }
       iter.asInstanceOf[Iterable[_]].foreach(item => b += mapToMongo(f, None, OpmField(item)))
       b.result()
-    }
-    case (f, optFieldClass, tuple) if tuple.isInstanceOf[Tuple2[_, _]] => {
+    case (f, optFieldClass, tuple) if tuple.isInstanceOf[Tuple2[_, _]] =>
       // tuples get encoded as lists-of-2. This is needed for properly encoding a Map.
       val t = tuple.asInstanceOf[Tuple2[_, _]]
       (mapToMongo(f, None, OpmField(t._1)), mapToMongo(f, None, OpmField(t._2)))
-    }
     case (f, _, o) if o.isInstanceOf[OpmObject] =>
       val proxy = OpmFactory.recoverModel(o.asInstanceOf[OpmObject])
       val builder = MongoDBObject.newBuilder
@@ -118,7 +119,7 @@ trait OpmMongoStorage[V <: OpmObject] extends OpmStorage[V] with MongoMapper wit
     }.toMap
   }
 
-  private [this] lazy val defaultFromMongoMapper: PartialFunction[(String, Option[Class[_]], AnyRef), AnyRef] = {
+  private[this] lazy val defaultFromMongoMapper: PartialFunction[(String, Option[Class[_]], AnyRef), AnyRef] = {
     // BSON can't represent every primitive type, so these have to be handled specially
     case (_, Some(cls), n: Number) if cls == classOf[Byte] => n.byteValue.asInstanceOf[AnyRef]
     case (_, Some(cls), s: String) if cls == classOf[Char] && !s.isEmpty => s.charAt(0).asInstanceOf[AnyRef]
@@ -148,7 +149,7 @@ trait OpmMongoStorage[V <: OpmObject] extends OpmStorage[V] with MongoMapper wit
         (None, loadedSeq)
       }
       cts._2.map(mapFromMongo(field, None, _).value) match {
-          // here we deal with container types we can can infer the collection type from the OpmObject method signature
+        // here we deal with container types we can can infer the collection type from the OpmObject method signature
         case aSet if fieldClassOpt == Some(classOf[Set[_]]) => aSet.toSet
         case aMap if fieldClassOpt == Some(classOf[Map[_, _]]) => mongoListToMap(aMap)
         case aList if fieldClassOpt == Some(classOf[List[_]]) => aList.toList
@@ -156,9 +157,9 @@ trait OpmMongoStorage[V <: OpmObject] extends OpmStorage[V] with MongoMapper wit
         case anIndexedSeq if fieldClassOpt == Some(classOf[IndexedSeq[_]]) => anIndexedSeq.toIndexedSeq
         case aSeq if fieldClassOpt == Some(classOf[Seq[_]]) => aSeq.toIndexedSeq
         case other if cts._1.isDefined => collectionCnameDecoder(other, cts._1.get)
-        case other =>  other
+        case other => other
       }
-    case (field, fieldClassOpt, o) if o.isInstanceOf[DBObject] && o.asInstanceOf[DBObject].get("_nested_opm_") == true =>
+    case (field, fieldClassOpt, o) if o.isInstanceOf[DBObject] && o.asInstanceOf[DBObject].get("_nested_opm_").asInstanceOf[Boolean] =>
       val mongoDbObject = wrapDBObj(o.asInstanceOf[DBObject])
       val className = mongoDbObject.as[String](Classname)
       val timestamp = mongoDbObject.as[Long](Timestamp)
@@ -175,7 +176,7 @@ trait OpmMongoStorage[V <: OpmObject] extends OpmStorage[V] with MongoMapper wit
         opm =>
           val richOpm = OpmObject.toSetter(opm.asInstanceOf[OpmObject])(Manifest.classType(clazz))
           richOpm.timeline.find(_.opmTimestamp == timestamp).getOrElse {
-              sys.error("Could not load an object(%s, %s) with opmTimestamp %s".format(className, key, timestamp))
+            sys.error("Could not load an object(%s, %s) with opmTimestamp %s".format(className, key, timestamp))
           }
       }.getOrElse {
         sys.error("Could not figure out how to load (%s, %s, %s)".format(field, fieldClassOpt, o))
@@ -185,7 +186,9 @@ trait OpmMongoStorage[V <: OpmObject] extends OpmStorage[V] with MongoMapper wit
   // if the supplied toMongo mapper(s) can't handle a particular value, it gets passed through here. You might
   // want to set a breakpoint here and/or add some printlns to understand what's going on, and add new
   // handles in the defaultToMongoMapper or your own custom toMongoMapper
-  private [this] lazy val identity: PartialFunction[(String, Option[Class[_]], AnyRef), AnyRef] = { case x => x._3 }
+  private[this] lazy val identity: PartialFunction[(String, Option[Class[_]], AnyRef), AnyRef] = {
+    case x => x._3
+  }
 
   // maps a field to its mongo representation. Note that the field value is largely ignored except for
   // log messages and error reports.  If the fieldType exists, that means that we were able to derive enough
@@ -193,7 +196,7 @@ trait OpmMongoStorage[V <: OpmObject] extends OpmStorage[V] with MongoMapper wit
   // about the types in the database itself -- we can derive it from the class.  If it's None, then we can't,
   // so the runtime needs to write some metadata about things like container types so that, for example, nested
   // collections can be recovered from mongo.
-  private [this] def mapToMongo(field: String, fieldType: Option[Class[_]], value: OpmField): Any = {
+  private[this] def mapToMongo(field: String, fieldType: Option[Class[_]], value: OpmField): Any = {
     value match {
       case OpmField(_, Some(pending)) => MongoDBObject(Pending -> pending.time)
       case OpmField(ref: AnyRef, None) =>
@@ -210,23 +213,26 @@ trait OpmMongoStorage[V <: OpmObject] extends OpmStorage[V] with MongoMapper wit
     mapToMongo(field, Option(method.getReturnType), OpmField(value))
   }
 
-  private [this] def mapFromMongo(field: String, fieldType: Option[Class[_]], value: Any): OpmField = {
+  private[this] def mapFromMongo(field: String, fieldType: Option[Class[_]], value: Any): OpmField = {
     val isOption = fieldType.isDefined && fieldType.get.isAssignableFrom(classOf[Option[_]])
 
-    if (value.isInstanceOf[DBObject] && !value.isInstanceOf[BasicBSONList] && wrapDBObj(value.asInstanceOf[DBObject]).contains(Pending)) OpmField(null, Some(NanoTimestamp(wrapDBObj(value.asInstanceOf[DBObject]).get(Pending).get.asInstanceOf[Long])))
-    else OpmField(Option(value).map { _ =>
-      val result = (fromMongoMapper orElse defaultFromMongoMapper orElse identity)(field, fieldType, value.asInstanceOf[AnyRef])
-      Option(result).map { _ =>
-        if (isOption)  Some(result) else result
+    value match {
+      case dBObject: DBObject if !value.isInstanceOf[BasicBSONList] && wrapDBObj(dBObject).contains(Pending) =>
+        OpmField(null, Some(NanoTimestamp(wrapDBObj(dBObject).get(Pending).get.asInstanceOf[Long])))
+      case _ => OpmField(Option(value).map { _ =>
+        val result = (fromMongoMapper orElse defaultFromMongoMapper orElse identity)(field, fieldType, value.asInstanceOf[AnyRef])
+        Option(result).map { _ =>
+          if (isOption) Some(result) else result
+        }.getOrElse {
+          if (isOption) None else null
+        }
       }.getOrElse {
         if (isOption) None else null
-      }
-    }.getOrElse {
-      if (isOption) None else null
-    })
+      })
+    }
   }
 
-  private [this] val sortFields = MongoDBObject(Timestamp -> -1, Type -> 1)
+  private[this] val sortFields = MongoDBObject(Timestamp -> -1, Type -> 1)
 
   private lazy val installedKeyIndex: Unit = collection.ensureIndex(MongoDBObject(Key -> 1))
 
@@ -243,8 +249,8 @@ trait OpmMongoStorage[V <: OpmObject] extends OpmStorage[V] with MongoMapper wit
 
 
   // writes the model to the database.
-  private [this] def create(model: OpmProxy)(implicit mf: Manifest[OpmObject]) {
-    val history = (model #:: model.history)
+  private[this] def create(model: OpmProxy)(implicit mf: Manifest[OpmObject]) {
+    val history = model #:: model.history
     if (history.size > 1) {
       history.zip(history.tail).foreach(r => require(r._1.timestamp != r._2.timestamp, "Equal timestamps: %s".format(r)))
     }
@@ -253,7 +259,7 @@ trait OpmMongoStorage[V <: OpmObject] extends OpmStorage[V] with MongoMapper wit
 
   // updates the database with the latest changes to the object.  Assumes an object with this key has already
   // been passed to the create method.
-  private [this] def update(model: OpmProxy)(implicit mf: Manifest[V]) {
+  private[this] def update(model: OpmProxy)(implicit mf: Manifest[V]) {
     // Two cases to consider: the client user may have loaded an object and then added to it,
     // in which case we need to stitch. Or, he may have created a new object with this key,
     // and we need to completely replace the old timeline with this timeline. The only way to
@@ -269,18 +275,18 @@ trait OpmMongoStorage[V <: OpmObject] extends OpmStorage[V] with MongoMapper wit
     allCatch either this.lock(model.key) match {
       case Right(lock) =>
         try {
-          val oldModel = get(model.key)
+          val oldModel: Option[V] = get(model.key)
           require(oldModel.isDefined, "Tried to update %s; not already in the database".format(model))
           val firstTimestamp = oldModel.get.opmTimestamp
           val curStream = model #:: model.history
           val alreadyWritten = curStream.dropWhile(_.timestamp > firstTimestamp)
-          if (!alreadyWritten.isEmpty && alreadyWritten.head.timestamp == firstTimestamp) {
+          if (alreadyWritten.nonEmpty && alreadyWritten.head.timestamp == firstTimestamp) {
             // we need to stitch (but this is basically fast-forward)
             // This is hard. I have a picture that might help explain this, but expect to invest some time
             // forming the mental model if you really want to understand this.
-            val mongoStream = collection.find(MongoDBObject(Key -> model.key)).sort(sortFields).toStream.map(wrapDBObj(_))
+            val mongoStream = collection.find(MongoDBObject(Key -> model.key)).sort(sortFields).toStream.map(wrapDBObj)
             val lastFrame = mongoStream.take(wavelength)
-            require(!lastFrame.isEmpty, "No mongo records found for key %s; did you create first?".format(model.key))
+            require(lastFrame.nonEmpty, "No mongo records found for key %s; did you create first?".format(model.key))
             val oldPhase = (wavelength + lastFrame.takeWhile(_.as[String](Type) == DiffType).size) % wavelength
             val updateSize = curStream.takeWhile(_.timestamp > lastFrame.head.as[Long](Timestamp)).size
             val startPhase = (wavelength - (updateSize % wavelength) + oldPhase) % wavelength
@@ -291,7 +297,10 @@ trait OpmMongoStorage[V <: OpmObject] extends OpmStorage[V] with MongoMapper wit
             // todo: this could be quite slow if there were many, many changes made since these were loaded!
             // note this is an optimized version of:
             //  if (!model.history.map(_.timestamp).toSet.intersect(oldModel.get.timeline.map(_.opmTimestamp).toSet).isEmpty) {
-            val intersect = !model.history.map(_.timestamp).flatMap(ts => oldModel.get.timeline.find(_.opmTimestamp == ts)).isEmpty
+            import OpmObject._
+            val timestamps: Stream[Long] = model.history.map(_.timestamp)
+            val oldTimeline = oldModel.get.timeline
+            val intersect = timestamps.flatMap(ts => oldTimeline.find(_.opmTimestamp == ts)).nonEmpty
             if (intersect) {
               // model & oldModel share history, but the most recent oldModel timestamp is not in
               // model's history (so our histories have diverged, and we don't know what to do)
@@ -321,7 +330,7 @@ trait OpmMongoStorage[V <: OpmObject] extends OpmStorage[V] with MongoMapper wit
   // use of scala streams (?), and also has some memory risk.  We could obviate that possibly by
   // keeping softkeys and a mechanism to load on demand, but I guess we'll see.
   override def get(key: String)(implicit mf: Manifest[V]): Option[V] = {
-    val mongoStream = collection.find(MongoDBObject(Key -> key)).sort(sortFields).map(wrapDBObj(_)).toStream
+    val mongoStream = collection.find(MongoDBObject(Key -> key)).sort(sortFields).map(wrapDBObj).toStream
     val initialDiffs = mongoStream.takeWhile(_.as[String](Type) == DiffType)
     mongoStream.dropWhile(_.as[String](Type) == DiffType).headOption.flatMap {
       lastValueObj =>
@@ -354,7 +363,7 @@ trait OpmMongoStorage[V <: OpmObject] extends OpmStorage[V] with MongoMapper wit
           } else {
             lazy val tail = assembleFinalObjects(stream.tail)
             val head = stream.head.copy(history = tail.map(OpmFactory.recoverModel(_)))
-            OpmFactory.newProxy(head).asInstanceOf[V] #:: tail
+            OpmFactory.newProxy(head) #:: tail
           }
         }
 
@@ -366,15 +375,16 @@ trait OpmMongoStorage[V <: OpmObject] extends OpmStorage[V] with MongoMapper wit
     val mongoStream = collection.distinct(Key).
       toStream.
       flatMap((key: Any) => get(key.toString))
-    OpmQueryResult(mongoStream, Some((field, value) => mapToMongo(field, value))).search(OpmQueryNoFilter, false)
+    OpmQueryResult(mongoStream, Some((field, value) => mapToMongo(field, value))).search(OpmQueryNoFilter, matchInverse = false)
   }
 
   /**
    * Use this to pull a list of object keys that have been updated within the given time period.
    *
+   * Returns a Stream of key Strings that have been updated within the requested date range.
+   *
    * @param start: The timestamp to start at. If None, it will start at the beginning of time.
    * @param end: The timestamp to end at. If None, it will not cut off at any date.
-   * @return: A Stream of key Strings that have been updated within the requested date range.
    */
   def getUpdatedKeys(start: Option[NanoTimestamp], end: Option[NanoTimestamp]): Stream[String] = {
     val builder = MongoDBList.newBuilder
@@ -418,10 +428,11 @@ trait OpmMongoStorage[V <: OpmObject] extends OpmStorage[V] with MongoMapper wit
    * This uses the defined to-mongo mapping to help translate searched-for values. For example, Gilt Guid's can't be
    * deserialized to JSON without defining toMongoMapper; search makes use of this since it's here already.
    *
+   * Returns the list of objects that match the query.
+   *
    * @see com.gilt.opm.query.OpmSearcher
    * @param v: A 'method' that indicates which property should be searched against.
    * @tparam T: The class of the property being searched. In practice this will be inferred from the property given.
-   * @return: The list of objects that match the query.
    */
   def search[T](v: V => T)(implicit mf: Manifest[V]): OpmSearcherHelper[V, T] = {
     OpmSearcher[V](
@@ -431,21 +442,20 @@ trait OpmMongoStorage[V <: OpmObject] extends OpmStorage[V] with MongoMapper wit
   }
 
   /**
-   * Completes the search process with the query collected by OpmSearcher.
+   * Completes the search process with the query collected by OpmSearcher, returning a result object that
+   * can be further chained for more-detailed searches.
    *
    * @param query: The requested query, as determined by the chained search call.
    * @param matchInverse: Match the inverse of the query, i.e. 'not'.
-   * @param mf
-   * @return: A result object that can be further chained for more-detailed searches.
    */
   private def finishSearch(query: OpmPropertyQuery, matchInverse: Boolean)(implicit mf: Manifest[V]): OpmQueryResult[V] = {
     // The mongoStream simply pulls the keys of records for which the property matches the given value in either a
     // value or diff record. This may include records that no longer match the query, so the stream is again filtered
     // by the same query once the OPM objects are constructed [the .find(query) below].
     val mongoStream = collection.distinct(Key, MongoDBObject("$or" -> MongoDBList(
-        query.toMongoDBObject("%s.".format(Instance), matchInverse),
-        query.toMongoDBObject("%s.".format(Forward), matchInverse)
-      ))).
+      query.toMongoDBObject("%s.".format(Instance), matchInverse),
+      query.toMongoDBObject("%s.".format(Forward), matchInverse)
+    ))).
       toStream.
       flatMap((key: Any) => get(key.toString))
     OpmQueryResult[V](mongoStream, Some((field, value) => mapToMongo(field, value))).search(query, matchInverse)
@@ -456,7 +466,7 @@ trait OpmMongoStorage[V <: OpmObject] extends OpmStorage[V] with MongoMapper wit
     collection.remove(MongoDBObject(Key -> key))
   }
 
-  private [this] def injectHistory(proxyStream: Stream[OpmProxy]): Stream[OpmProxy] = {
+  private[this] def injectHistory(proxyStream: Stream[OpmProxy]): Stream[OpmProxy] = {
     if (proxyStream.isEmpty) {
       proxyStream
     } else {
@@ -464,7 +474,7 @@ trait OpmMongoStorage[V <: OpmObject] extends OpmStorage[V] with MongoMapper wit
     }
   }
 
-  private [this] def loadStream(key: String, head: OpmProxy, cursorStream: Stream[MongoDBObject], clazz: Class[_]): Stream[OpmProxy] = {
+  private[this] def loadStream(key: String, head: OpmProxy, cursorStream: Stream[MongoDBObject], clazz: Class[_]): Stream[OpmProxy] = {
     cursorStream.headOption.map {
       prevObj =>
         if (prevObj.as[String](Type) == ValueType) {
@@ -479,11 +489,13 @@ trait OpmMongoStorage[V <: OpmObject] extends OpmStorage[V] with MongoMapper wit
     }.getOrElse(Stream.empty)
   }
 
-  private [this] def objToDiffSet(obj: MongoDBObject, clazz: Class[_], direction: String): Set[Diff] = {
+  private[this] def objToDiffSet(obj: MongoDBObject, clazz: Class[_], direction: String): Set[Diff] = {
     require(direction == Forward || direction == Reverse,
       "direction must be either %s or %s; was %s".format(Forward, Reverse, direction))
 
-    val diffIterable = wrapDBObj(obj.as[DBObject](direction)).map {case (key, value) =>
+    import scala.language.existentials
+
+    val diffIterable = wrapDBObj(obj.as[DBObject](direction)).map { case (key, value) =>
       val valueType = if (OpmIntrospection.MetaFields.contains(key)) None
       else Some(OpmProxy.fieldType(key, clazz))
 
@@ -503,7 +515,7 @@ trait OpmMongoStorage[V <: OpmObject] extends OpmStorage[V] with MongoMapper wit
         case null if valueType.isEmpty || !valueType.get.isAssignableFrom(classOf[Option[_]]) =>
           Diff(key, None) // (a), (b), (d)
         case null =>
-          Diff(key, Some(OpmField(None)))   // (c), (e), (f)
+          Diff(key, Some(OpmField(None))) // (c), (e), (f)
 
         case value: Any =>
           Diff(key, Some(mapFromMongo(key, valueType, value)))
@@ -512,7 +524,7 @@ trait OpmMongoStorage[V <: OpmObject] extends OpmStorage[V] with MongoMapper wit
     diffIterable.toSet
   }
 
-  private [this] def toOpmProxy(key: String, valueRecord: DBObject): OpmProxy = {
+  private[this] def toOpmProxy(key: String, valueRecord: DBObject): OpmProxy = {
     require(valueRecord.get(Type) == ValueType, "Record was not value record: %s".format(valueRecord))
     val instance = wrapDBObj(valueRecord.get(Instance).asInstanceOf[DBObject])
     // casbah blows an exception if you do instance(key) and expect a null value back.
@@ -523,7 +535,7 @@ trait OpmMongoStorage[V <: OpmObject] extends OpmStorage[V] with MongoMapper wit
     opmProxy(key, clazz, timeStamp, fields.map(kv => kv._1 -> mapFromMongo(kv._1, Some(OpmProxy.fieldType(kv._1, clazz)), kv._2)))
   }
 
-  private [this] def opmProxy(key: String, clazz: Class[_], timeStamp: Long, fields: Map[String, OpmField]) = {
+  private[this] def opmProxy(key: String, clazz: Class[_], timeStamp: Long, fields: Map[String, OpmField]) = {
     OpmProxy(key, fields ++ Map(ClassField -> OpmField(clazz), TimestampField -> OpmField(timeStamp)))
   }
 
@@ -632,4 +644,4 @@ object OpmMongoStorage {
   val DiffType = "d"
 }
 
-trait OpmAuditedMongoStorage[T <: OpmAuditedObject[U], U] extends OpmMongoStorage[T] with OpmAuditedStorage[T,U]
+trait OpmAuditedMongoStorage[T <: OpmAuditedObject[U], U] extends OpmMongoStorage[T] with OpmAuditedStorage[T, U]

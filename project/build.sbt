@@ -1,1 +1,3 @@
-addSbtPlugin("com.giltgroupe" % "gilt-sbt-build" % "4.3.2")
+
+addSbtPlugin("org.scoverage" %% "sbt-scoverage" % "0.99.7.1")
+

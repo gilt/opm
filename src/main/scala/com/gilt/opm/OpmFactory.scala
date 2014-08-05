@@ -1,11 +1,11 @@
 package com.gilt.opm
 
 import java.lang.reflect.{Proxy, Method, InvocationHandler}
+import com.gilt.gfc.time.MonotonicClock
+
 import scala.collection.mutable
-import com.giltgroupe.util.time.MonotonicClock
 import com.gilt.opm.OpmFactory.OpmField
 import java.util
-import scala.collection.JavaConverters._
 
 object OpmIntrospection {
   val ClassField = "__c__"
@@ -64,7 +64,7 @@ trait OpmFactory {
 
   // return an array of fields not set in this map
   private [opm] def missingFields[T <: OpmObject : Manifest](init: Map[String, Any], ignoreOption: Boolean): Array[String] = {
-    fields.filterNot(ignoreOption && _.getReturnType.isAssignableFrom((classOf[Option[_]]))).map(_.getName).filterNot(init.contains)
+    fields.filterNot(ignoreOption && _.getReturnType.isAssignableFrom(classOf[Option[_]])).map(_.getName).filterNot(init.contains)
   }
 
   private[opm] def newProxy[T: Manifest](model: OpmProxy): T = {
@@ -85,13 +85,14 @@ trait OpmFactory {
           case "hashCode" =>
             method.invoke(model)
           case "equals" =>
-            if (args(0).isInstanceOf[OpmObject]) {
-              val bModel = recoverModel(args(0).asInstanceOf[OpmObject])
-              val a = model.fields.filter(_._1 != TimestampField)
-              val b = bModel.fields.filter(_._1 != TimestampField)
-              (a == b).asInstanceOf[AnyRef]
-            } else {
-              false.asInstanceOf[AnyRef]
+            args(0) match {
+              case obj: OpmObject =>
+                val bModel = recoverModel(obj)
+                val a = model.fields.filter(_._1 != TimestampField)
+                val b = bModel.fields.filter(_._1 != TimestampField)
+                (a == b).asInstanceOf[AnyRef]
+              case _ =>
+                false.asInstanceOf[AnyRef]
             }
           case "opmTimestamp" =>
             if (introspectionMode.get) {
@@ -144,8 +145,11 @@ trait OpmFactory {
             } else {
               if (model.fields.contains(fieldName)) {
                 model.fields(fieldName) match {
-                  case OpmField(_, Some(pending)) if (pending > NanoTimestamp.now) => throw PendingOpmValueException("field '%s' on object is pending until %s".format(fieldName, pending))
+                  case OpmField(_, Some(pending)) if pending > NanoTimestamp.now => throw PendingOpmValueException("field '%s' on object is pending until %s".format(fieldName, pending))
                   case OpmField(value, Some(pending)) => throw new NoSuchElementException("key not found: %s".format(fieldName))
+                  //case OpmField(Some(value), None) if value.isInstanceOf[Double] =>
+                    // if the expected return type is Option[Float], there is a good chance that value is a Double,
+                    // so figure that out and cast now
                   case OpmField(value, None) => value.asInstanceOf[AnyRef]
                   case other => other.asInstanceOf[AnyRef]
                 }
@@ -181,7 +185,7 @@ trait OpmFactory {
 
 object OpmFactory extends OpmFactory {
 
-  def clock() = MonotonicClock.currentTimeNanos
+  def clock() = MonotonicClock.currentTimeNanos()
 
   private [opm] val EmptyMap: Map[_,_] = Map.empty
   private [opm] val EmptySet: Set[_] = Set.empty
@@ -192,6 +196,8 @@ object OpmFactory extends OpmFactory {
   private [opm] val EmptyJSet: util.Set[_] = util.Collections.emptySet()
 
   private [opm] case class OpmField(value: Any, pending: Option[NanoTimestamp] = None)
+
+  import scala.language.existentials
 
   private [opm] case class Scratch(model: OpmProxy, field: String, clazz: Class[_])
 
@@ -231,12 +237,12 @@ object OpmFactory extends OpmFactory {
       ("We only support changing class to traits mixed into the class ( ... request additional leeway if you need it) " +
         "(this = %s, that = %s)").format(thisModel.clazz, thatModel.clazz))
     val allFields = (thisModel.fields.map(_._1).toSet ++ thatModel.fields.map(_._1)).filterNot(MetaFields)
-    val diffs = for (field <- allFields if (!isBuilder || thisModel.fields.contains(field))) yield {
+    val diffs = for (field <- allFields if !isBuilder || thisModel.fields.contains(field)) yield {
       (thisModel.fields.get(field), thatModel.fields.get(field)) match {
         case (None, Some(any)) => Some(Diff(field, None))
         case (any@Some(_), None) => Some(Diff(field, any))
         // If pending flag has expired, set to whatever is given
-        case (any, Some(OpmField(oldVal, Some(oldPending)))) if (oldPending < NanoTimestamp.now) => Some(Diff(field, any))
+        case (any, Some(OpmField(oldVal, Some(oldPending)))) if oldPending < NanoTimestamp.now => Some(Diff(field, any))
 
         // If the value was None and is now Some or pending, set to whatever is given
         case (any@Some(OpmField(Some(_), _)), Some(OpmField(None, _))) => Some(Diff(field, any))

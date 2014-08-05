@@ -1,17 +1,26 @@
 package com.gilt.opm
 
 import java.util.concurrent.TimeUnit
+import com.gilt.gfc.time.Timestamp
 import org.scalatest.FunSuite
-import com.giltgroupe.util.Timestamp
-import com.giltgroupe.util.client.CommonsJson
+import play.api.libs.json._
 
 case class TestClass(id: String, ts: NanoTimestamp)
+
+object TestClass {
+  implicit val nanoFormat = new Format[NanoTimestamp] {
+    override def writes(o: NanoTimestamp): JsValue = JsObject(Seq("time" -> JsNumber(o.time)))
+
+    override def reads(json: JsValue): JsResult[NanoTimestamp] = JsSuccess(new NanoTimestamp(
+      time = (json \ "time").as[Long]
+    ))
+  }
+  implicit val formatter = Json.format[TestClass]
+}
 
 /**
  * Testing suite for the NanoTimestamp class.
  *
- * @author: Ryan Martin
- * @since: 11/19/12 3:01 PM
  * @see NanoTimestamp
  */
 class NanoTimestampTest extends FunSuite {
@@ -68,8 +77,8 @@ class NanoTimestampTest extends FunSuite {
   }
 
   test("timestamp toString") {
-    assert((new NanoTimestamp(1)).toString == "Thu, 1 Jan 1970 00:00:00.000000001 UTC")
-    assert((new NanoTimestamp(new Timestamp(1000), 1)).toString == "Thu, 1 Jan 1970 00:00:01.000000001 UTC")
+    assert(new NanoTimestamp(1).toString == "Thu, 1 Jan 1970 00:00:00.000000001 UTC")
+    assert(new NanoTimestamp(new Timestamp(1000), 1).toString == "Thu, 1 Jan 1970 00:00:01.000000001 UTC")
   }
 
   test("string to timestamp") {
@@ -82,8 +91,8 @@ class NanoTimestampTest extends FunSuite {
 
   test("serialize into and out of JSON") {
     val test1 = TestClass("1234", new NanoTimestamp)
-    val json = CommonsJson.generate(test1)
-    val test2 = CommonsJson.parse[TestClass](json)
+    val json = Json.toJson(test1)
+    val test2 = Json.fromJson[TestClass](json).get
     assert(test1 == test2)
     assert(test1.ts.time == test2.ts.time)
   }

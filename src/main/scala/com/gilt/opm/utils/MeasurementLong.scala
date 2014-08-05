@@ -1,13 +1,12 @@
-package com.giltgroupe.util
+package com.gilt.opm.utils
 
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.TimeUnit._
 
+import scala.language.implicitConversions
+
 /**
  * A DSL to convert units of time. Uses TimeUnit under the hood, but is more usable.
- *
- * @author: Ryan Martin
- * @since: 11/26/12 10:10 AM
  */
 case class MeasurementLong(amount: Long, units: TimeUnit) {
   def in(convertTo: TimeUnit) = MeasurementLong(convertTo.convert(amount, units), convertTo)
