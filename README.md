@@ -71,17 +71,6 @@ Note that we need to divide the timestamp by 1000000 to convert it to the standa
 
 You can also see in this example, that the head of the stream is the most recent version of the object, and you can traverse backwards in time through the stream.
 
-To find the state of the object at some particular time, you might do something like:
-
-
-This gives us a `user` instance with "no history," because we called `prune`. If we hadn't done that, then the object would hold the history of its creation (which is to say, first we had an empty object, followed by an object with a name set. That part of the history is probably not that interesting).
-
-Objects in ppm are immutable, and they let you access their entire history. Let's look at an example:
-
-	val modifiedUser = user.set(_.name).to("Eric Lennon Bowman")
-
-Now we examine its "timeline", which holds the history of this object's evolution:
-
 Suppose you wanted to find the value of an object two hours ago, you might write code like:
 
 	import scala.concurrent.duration._
