@@ -18,3 +18,4 @@ instrumentSettings
 
 ScoverageKeys.highlighting := true
 
+resolvers += "Typesafe releases" at "https://repo.typesafe.com/typesafe/releases"

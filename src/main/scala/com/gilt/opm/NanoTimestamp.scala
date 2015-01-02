@@ -1,6 +1,7 @@
 package com.gilt.opm
 
-import com.gilt.gfc.time.{MonotonicClock, Timestamp}
+import com.gilt.gfc.time.Timestamp
+import com.gilt.opm.utils.MonotonicClock
 import com.gilt.opm.utils.{RichLongForMeasurement, MeasurementLong}
 import RichLongForMeasurement._
 import MeasurementLong._

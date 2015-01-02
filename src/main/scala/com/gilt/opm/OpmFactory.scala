@@ -1,7 +1,7 @@
 package com.gilt.opm
 
 import java.lang.reflect.{Proxy, Method, InvocationHandler}
-import com.gilt.gfc.time.MonotonicClock
+import com.gilt.opm.utils.MonotonicClock
 
 import scala.collection.mutable
 import com.gilt.opm.OpmFactory.OpmField
