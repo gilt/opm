@@ -3,7 +3,7 @@ name := "opm"
 
 organization := "com.gilt"
 
-version := "2.0.0"
+version := "2.0.1"
 
 homepage := Some(url("http://github.com/gilt/opm"))
 
