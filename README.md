@@ -1,6 +1,8 @@
 
 Object Prevalence Model (OPM)
 
+[![Codacy Badge](https://www.codacy.com/project/badge/61e94e53adb44185aa461e1186986f4b)](https://www.codacy.com/public/myykseok/opm)
+
 OPM is a Scala library for managing the value of an object over time as a timeline of changes. It works either in-memory or durably atop MongoDB.
 
 Let’s start with a simple example:
