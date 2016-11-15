@@ -1,8 +1,14 @@
+import scoverage.ScoverageKeys
+
 scalaVersion := "2.11.8"
 
 crossScalaVersions := Seq("2.11.8")
 
 scalacOptions := Seq("-deprecation", "-feature")
+
+ScoverageKeys.coverageFailOnMinimum := true
+
+ScoverageKeys.coverageMinimum := 91.3
 
 libraryDependencies ++= Seq(
   "com.gilt" %% "gfc-util" % "0.0.3",
