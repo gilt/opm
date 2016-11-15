@@ -10,7 +10,7 @@ libraryDependencies ++= Seq(
   "com.gilt" %% "gfc-id" % "0.0.3",
   "org.mongodb" %% "casbah-core" % "2.7.4",
   "com.fasterxml.jackson.core" % "jackson-annotations" % "2.5.0",
-  "org.scalatest" %% "scalatest" % "2.2.1" % "test",
+  "org.scalatest" %% "scalatest" % "3.0.0" % "test",
   "com.typesafe.play" %% "play-json" % "2.3.7" % "test"
 )
 
