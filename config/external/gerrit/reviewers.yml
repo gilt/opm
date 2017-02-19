@@ -1,9 +1,0 @@
-default: &default
-  - ebowman@gilt.com
-  - rmartin@gilt.com
-
-master:
-  *default
-
-stage:
-  *default
