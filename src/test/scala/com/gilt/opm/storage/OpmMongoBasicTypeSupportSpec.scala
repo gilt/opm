@@ -23,7 +23,12 @@ object OpmMongoBasicTypeSupportSpec {
 import OpmMongoBasicTypeSupportSpec._
 
 class OpmMongoBasicTypeSupportSpec
-extends FlatSpec with Matchers with OpmMongoStorage[BasicTypes] with OpmMongoBasicTypeSupport with CollectionHelper {
+  extends FlatSpec
+  with Matchers
+  with OpmMongoStorage[BasicTypes]
+  with OpmMongoBasicTypeSupport
+  with CollectionHelper {
+
   val collectionName = "basic_types"
 
   "OpmMongoBasicTypeSupport" should "allow extra basic types to be stored and loaded" in {
