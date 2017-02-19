@@ -19,17 +19,22 @@ object OpmMongoBasicTypeSupportSpec {
     def mapBigDecimalValues: Map[String, BigDecimal]
     def mapBigDecimalKeys: Map[BigDecimal, String]
   }
+
+  class BasicTypesTestMongoStorage
+    extends OpmMongoStorage[BasicTypes]
+    with OpmMongoBasicTypeSupport
+    with CollectionHelper {
+    val collectionName = "basic_types"
+  }
 }
+
 import OpmMongoBasicTypeSupportSpec._
 
 class OpmMongoBasicTypeSupportSpec
   extends FlatSpec
-  with Matchers
-  with OpmMongoStorage[BasicTypes]
-  with OpmMongoBasicTypeSupport
-  with CollectionHelper {
+  with Matchers {
 
-  val collectionName = "basic_types"
+  val storage = new BasicTypesTestMongoStorage
 
   "OpmMongoBasicTypeSupport" should "allow extra basic types to be stored and loaded" in {
     val bt = instance[BasicTypes]("key")
@@ -43,9 +48,10 @@ class OpmMongoBasicTypeSupportSpec
       .set(_.optBigDecimal).to(Some(BigDecimal(1) / 3))
       .set(_.mapBigDecimalValues).to(Map("a" -> BigDecimal(1) / 3, "b" -> BigDecimal("0.5")))
       .set(_.mapBigDecimalKeys).to(Map(BigDecimal(1) / 3 -> "a", BigDecimal("0.5") -> "b"))
-    put(bt)
-    val loaded = get("key")
+    storage.put(bt)
+    val loaded = storage.get("key")
     assert(loaded.isDefined)
     assert(bt === loaded.get)
+
   }
 }
