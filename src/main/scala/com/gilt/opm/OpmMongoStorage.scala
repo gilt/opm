@@ -250,7 +250,7 @@ trait OpmMongoStorage[V <: OpmObject] extends OpmStorage[V] with MongoMapper wit
 
   // writes the model to the database.
   private[this] def create(model: OpmProxy)(implicit mf: Manifest[OpmObject]) {
-    val history = model #:: model.history
+    val history = model #:: model.history.toStream
     if (history.size > 1) {
       history.zip(history.tail).foreach(r => require(r._1.timestamp != r._2.timestamp, "Equal timestamps: %s".format(r)))
     }
@@ -278,7 +278,7 @@ trait OpmMongoStorage[V <: OpmObject] extends OpmStorage[V] with MongoMapper wit
           val oldModel: Option[V] = get(model.key)
           require(oldModel.isDefined, "Tried to update %s; not already in the database".format(model))
           val firstTimestamp = oldModel.get.opmTimestamp
-          val curStream = model #:: model.history
+          val curStream = model #:: model.history.toStream
           val alreadyWritten = curStream.dropWhile(_.timestamp > firstTimestamp)
           if (alreadyWritten.nonEmpty && alreadyWritten.head.timestamp == firstTimestamp) {
             // we need to stitch (but this is basically fast-forward)
@@ -298,7 +298,7 @@ trait OpmMongoStorage[V <: OpmObject] extends OpmStorage[V] with MongoMapper wit
             // note this is an optimized version of:
             //  if (!model.history.map(_.timestamp).toSet.intersect(oldModel.get.timeline.map(_.opmTimestamp).toSet).isEmpty) {
             import OpmObject._
-            val timestamps: Stream[Long] = model.history.map(_.timestamp)
+            val timestamps: Stream[Long] = model.history.toStream.map(_.timestamp)
             val oldTimeline = oldModel.get.timeline
             val intersect = timestamps.flatMap(ts => oldTimeline.find(_.opmTimestamp == ts)).nonEmpty
             if (intersect) {
@@ -362,7 +362,7 @@ trait OpmMongoStorage[V <: OpmObject] extends OpmStorage[V] with MongoMapper wit
             Stream.empty
           } else {
             lazy val tail = assembleFinalObjects(stream.tail)
-            val head = stream.head.copy(history = tail.map(OpmFactory.recoverModel(_)))
+            val head = stream.head.copy(history = new OpmProxy.History(tail.map(OpmFactory.recoverModel(_))))
             OpmFactory.newProxy(head) #:: tail
           }
         }
@@ -464,14 +464,6 @@ trait OpmMongoStorage[V <: OpmObject] extends OpmStorage[V] with MongoMapper wit
   // deletes all records with the given key, doing nothing if the key doesn't exist.
   override def remove(key: String) {
     collection.remove(MongoDBObject(Key -> key))
-  }
-
-  private[this] def injectHistory(proxyStream: Stream[OpmProxy]): Stream[OpmProxy] = {
-    if (proxyStream.isEmpty) {
-      proxyStream
-    } else {
-      proxyStream.head.copy(history = proxyStream.tail) #:: injectHistory(proxyStream.tail)
-    }
   }
 
   private[this] def loadStream(key: String, head: OpmProxy, cursorStream: Stream[MongoDBObject], clazz: Class[_]): Stream[OpmProxy] = {
@@ -604,7 +596,7 @@ trait OpmMongoStorage[V <: OpmObject] extends OpmStorage[V] with MongoMapper wit
     val fields = obj.fields
     val builder = MongoDBObject.newBuilder
     builder += "_id" -> createId(key, obj, ValueType)
-    obj.history.headOption.foreach {
+    obj.history.toStream.headOption.foreach {
       prev =>
         builder += PrevKey -> createId(key, prev, if (wavelength == 1) ValueType else DiffType)
     }

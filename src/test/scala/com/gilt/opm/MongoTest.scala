@@ -138,6 +138,37 @@ class MongoTest extends FunSuite with OpmMongoStorage[MongoTest.TestDomain] with
     historyReloaded.zip(obj2.timeline).foreach(x => assert(x._1 === x._2))
   }
 
+  test("get 10000 changes and don't cause a stack overflow") {
+    val key = System.currentTimeMillis().toString
+    val guid = Guid.randomGuid()
+    val obj = instance[TestDomain](key).set(_.guid).to(guid)
+
+    squashPut(obj)
+
+    val count = 10000
+    val updatedObj = (1 to count).foldLeft(obj) {
+      case (i: TestDomain, n: Int) =>
+        i.set(_.id).to(n)
+    }
+
+    put(updatedObj)
+
+    // Before my fix, the get function would construct the entire history of an
+    // object when loaded from mongo. For records with *many* changes this
+    // would cause a stack overflow (see the recursive "assembleFinalObjects"
+    // function in the get method).
+    val before = System.currentTimeMillis()
+    val all    = get(key)
+    val after  = System.currentTimeMillis()
+
+    all.map { _ =>
+      // In reality, this should be considerably less than 2 seconds but I
+      // couldn't think of a great thing to assert here. Maybe it's better not
+      // to assert at all.
+      assert((after - before) < 2000)
+    }
+  }
+
   test("phase != 0 write ordering works") {
     val key = 2.toString
     val obj = instance[TestDomain](key).set(_.id).to(1).set(_.id).to(2).set(_.id).to(3).set(_.id).to(4)

@@ -185,7 +185,7 @@ abstract class RichOpmObjectInitializer[T <: OpmObject : Manifest] {
   private [opm] def ::=[V](v: V): T = this.pruneTo(v)
 
   def prune: T = {
-    OpmFactory.instance(model.copy(history = Stream.empty))
+    OpmFactory.instance(model.copy(history =  OpmProxy.EmptyHistory))
   }
 
   def forceAfter(currentHead: RichOpmObjectInitializer[T]): T = {
@@ -196,7 +196,7 @@ abstract class RichOpmObjectInitializer[T <: OpmObject : Manifest] {
 
   // this object and its history
   def timeline: Stream[T] = {
-    obj #:: model.history.view.map(OpmFactory.newProxy(_)).toStream
+    obj #:: model.history.toStream.view.map(OpmFactory.newProxy(_)).toStream
   }
 
   // a diff b returns the set of changes such that
