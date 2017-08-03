@@ -5,7 +5,7 @@ import java.lang.reflect.Method
 import com.gilt.opm.OpmIntrospection._
 import com.gilt.opm.OpmFactory.OpmField
 
-private [opm] case class OpmProxy(key: String, fields: Map[String, OpmField], history: Stream[OpmProxy] = Nil.toStream) {
+private [opm] case class OpmProxy(key: String, fields: Map[String, OpmField], history: OpmProxy.History = OpmProxy.EmptyHistory) {
 
   import OpmIntrospection._
 
@@ -41,6 +41,31 @@ private [opm] case class OpmProxy(key: String, fields: Map[String, OpmField], hi
 }
 
 object OpmProxy {
+
+  /**
+    * This history object simply wraps a function that will generate the
+    * history of an opm proxy object.
+    *
+    * This was necessitated by the recursive history generation in the "get"
+    * method from OpmMongoStorage. The function uses a lazy val to (ostensibly)
+    * prevent the full recursion from evaluating. Unfortunately that lazy val
+    * was evaluated on the very next line, causing the function to recurse the
+    * entire length of the stream. Since this history class uses a function to
+    * generate the history, we can delay that evaluation until it is actually
+    * needed.
+    *
+    * If you would like to experience the old behavior, simply change the ctor
+    * arg to a value (instead of a function) and run the test I added.
+    */
+  private[opm] class History(history: => Stream[OpmProxy]) {
+    def toStream: Stream[OpmProxy] = history
+
+    def #::(opmProxy: OpmProxy) = new History(opmProxy #:: history)
+    def #:::(stream: Stream[OpmProxy]) = new History(stream #::: history)
+  }
+
+  private[opm] val EmptyHistory = new History(Stream.empty)
+
   def fieldMethod(field: String, clazz: Class[_]): Method = clazz.getMethod(field)
 
   /**
